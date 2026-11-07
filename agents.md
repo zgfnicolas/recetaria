@@ -8,7 +8,7 @@
 | **Estado** | Aprobado |
 | **Responsable Técnico** | Facundo Nicolás González |
 | **Fecha de Última Revisión** | 06/11/2026 |
-| **Recursos** | TP integrador - Tu propia API REST_1.pdf, `schema.prisma` |
+| **Recursos** | Trabajo práctico integrador, `schema.prisma` |
 
 ### 1. Identidad y mandato del Agente
 
