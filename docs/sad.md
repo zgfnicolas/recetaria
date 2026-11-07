@@ -8,7 +8,7 @@
 | **Estado** | En Revisión |
 | **Responsable Técnico** | Facundo Nicolás González |
 | **Fecha de Última Revisión** | 06/11/2026 |
-| **Recursos** | TP integrador - Tu propia API REST_1.pdf |
+| **Recursos** | Trabajo práctico integrador |
 
 ### 2. Arquitectura de Infraestructura
 
