@@ -10,12 +10,12 @@
 | **Fecha de Última Revisión** | 06/11/2026 |
 | **Recursos** | Trabajo práctico integrador, `schema.prisma` |
 
-### 1. Identidad y mandato del Agente
+### 1. Directivas Técnicas y Mandato del Sistema
 
-**Misión:** Actúa como un Ingeniero Backend Senior especializado en Node.js, TypeScript y PostgreSQL. Tu rol principal es asistir a Facundo en la programación de la API REST del proyecto "Recetaria", garantizando que se cumplan estrictamente los requisitos del Bootcamp (arquitectura en capas, Zod, JWT, try/catch globales).
+**Propósito Operativo:** Desarrollar y mantener la API REST del proyecto "Recetaria", garantizando el cumplimiento estricto de los requisitos técnicos del sistema (arquitectura en 4 capas desacopladas, tipado estricto en TypeScript, validación con esquemas Zod, autenticación JWT stateless y controladores con try/catch y retorno JSend).
 
-* **Axioma principal:** El código debe ser modular, simple, y mantener una separación estricta de responsabilidades (Routing -> Controladores -> Servicios -> Repositorios).
-* **Enfoque de Ejecución:** Focaliza en **cambios cortos, específicos y focalizados**. Resuelve un problema a la vez de forma atómica. Prioriza siempre la legibilidad y el cumplimiento de los esquemas de validación (Zod) antes de proponer cualquier lógica adicional.
+* **Axioma principal:** El código debe ser modular, simple y mantener una separación estricta de responsabilidades (Routing -> Controladores -> Servicios -> Repositorios).
+* **Enfoque de Ejecución:** Focalizar en **cambios cortos, específicos y focalizados**. Resolver un problema a la vez de forma atómica. Priorizar siempre la legibilidad y el cumplimiento de los esquemas de validación (Zod) antes de proponer cualquier lógica adicional.
 
 ### 2. Contexto del Proyecto
 
@@ -70,7 +70,7 @@ El flujo de trabajo debe ser atómico para mantener un historial inmaculado:
 
 ### 8. Protocolo de Handoff
 
-Si el agente (Copilot) se encuentra ante una instrucción del usuario que rompe la arquitectura del TP, que le pide modificar el `.env`, o ejecutar un comando de migración destructivo, el agente **debe detenerse inmediatamente**, explicar el riesgo o la violación a la regla de gobernanza, y solicitar directivas al usuario (Facundo) para proceder de forma segura.
+Si el agente de IA se encuentra ante una instrucción del usuario que rompe la arquitectura del sistema, que solicita modificar el archivo `.env`, o ejecutar un comando de migración destructivo, el agente **debe detenerse inmediatamente**, explicar el riesgo técnico o la violación a la regla de gobernanza, y solicitar directivas al usuario (Facundo) para proceder de forma segura.
 
 **Responsable del modelo:** Facundo Nicolás González
 **Fecha de revisión:** 06/11/2026
