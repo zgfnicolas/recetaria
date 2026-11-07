@@ -1,0 +1,228 @@
+# ==============================================================================
+# RECETARIA API - FULL LLM CONTEXT SPECIFICATION (llms-full.txt)
+# Standard: ISO/IEC 26514 / IEEE 29148 / SKL-PRO-001
+# Purpose: Comprehensive, self-contained technical corpus for large context LLMs.
+# Version: 1.1.0 | Project: Recetaria (Phase 1: Academic MVP Backend API)
+# Author: Facundo Nicolás González
+# ==============================================================================
+
+# SECTION 1: SYSTEM OVERVIEW & STACK
+[PROJECT IDENTITY]
+- Name: Recetaria API (MVP Backend)
+- Goal: RESTful API for recipe sharing, enhanced by strict role-based clinical and culinary validation (RBAC).
+- Core Value: Bridges user-generated content (UGC) with verification from Nutritionists and Chefs.
+
+[TECHNOLOGY STACK]
+- Runtime: Node.js (v18+)
+- Language: TypeScript (Strict mode enabled, no implicit any)
+- Web Framework: Express.js
+- Database: PostgreSQL (v15+)
+- ORM: Prisma ORM (v5+)
+- Schema Validation: Zod
+- Security & Cryptography: Bcrypt (Password hashing, salt rounds >= 10), JSON Web Tokens (JWT, stateless Bearer auth)
+- Testing & QA: Vitest / Jest, Supertest, Thunder Client Collections
+
+
+# SECTION 2: MACRO ARCHITECTURE & LAYER RULES
+[4-LAYER ARCHITECTURAL PATTERN]
+Architecture follows a feature-modular layered monolith:
+Client Request -> Express Router -> Middleware Pipeline -> Controller -> Service -> Repository (Prisma) -> PostgreSQL
+
+[LAYER RESPONSIBILITIES]
+1. ROUTER (src/modules/*/router.ts):
+   - Maps URL paths and HTTP verbs.
+   - Applies middleware sequence: Zod validation -> JWT authentication -> RBAC authorization.
+   - Zero business logic allowed in routers.
+
+2. MIDDLEWARES (src/middlewares/*):
+   - validateMiddleware: Intercepts req.body, req.query, req.params using Zod schemas. Emits 400 Bad Request on failure.
+   - authMiddleware: Verifies Bearer JWT from Authorization header. Attaches user context to req.user = { id: string, role: Role }.
+   - rbacMiddleware(roles: Role[]): Asserts req.user.role is within permitted list. Emits 403 Forbidden on violation.
+   - errorHandlerMiddleware: Global catch-all preventing Node.js process crashes, outputting standardized JSend 500 envelopes.
+
+3. CONTROLLER (src/modules/*/controller.ts):
+   - Handles HTTP protocol concerns (req, res).
+   - Extracts validated parameters and DTOs.
+   - Delegates business execution to the corresponding Service.
+   - Every method MUST be wrapped in a try/catch block.
+   - Formats and emits standardized JSend JSON envelopes.
+
+4. SERVICE (src/modules/*/service.ts):
+   - Encapsulates 100% of business logic and invariants.
+   - Performs domain checks (e.g. recipe status transitions, ownership verification).
+   - Coordinates multi-entity ACID transactions via Prisma $transaction.
+   - INVIOLABLE RULE: Services NEVER instantiate or invoke Prisma Client directly. They must exclusively call Repositories.
+
+5. REPOSITORY (src/modules/*/repository.ts):
+   - Isolates Prisma Client and direct database communication.
+   - Provides strongly-typed CRUD and query methods.
+
+
+# SECTION 3: UNIVERSAL RESPONSE CONTRACT (JSEND EXTENDED)
+All API endpoints return JSON conforming strictly to the JSend standard envelope:
+
+[SUCCESS RESPONSE (HTTP 200, 201)]
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Operación ejecutada exitosamente",
+  "data": { ... } | [ ... ]
+}
+
+[ERROR RESPONSE (HTTP 400, 401, 403, 404, 409, 500)]
+{
+  "success": false,
+  "statusCode": 400,
+  "message": "Descripción clara del error",
+  "errors": [
+    {
+      "field": "prepTimeMinutes",
+      "message": "El tiempo de preparación debe ser mayor a 0"
+    }
+  ]
+}
+
+
+# SECTION 4: DATA MODEL & RELATIONAL SCHEMA (PostgreSQL / Prisma)
+[ENUMS]
+- Role: USER | CHEF | NUTRITIONIST | ADMIN
+- RecipeStatus: DRAFT | PENDING_REVIEW | APPROVED | REJECTED | ARCHIVED
+- Difficulty: EASY | MEDIUM | HARD | EXPERT
+
+[DATABASE TABLES]
+TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  passwordHash VARCHAR(255) NOT NULL,
+  firstName VARCHAR(100) NOT NULL,
+  lastName VARCHAR(100) NOT NULL,
+  role Role NOT NULL DEFAULT 'USER',
+  isActive BOOLEAN NOT NULL DEFAULT TRUE,
+  createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updatedAt TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+TABLE recipes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(150) NOT NULL,
+  slug VARCHAR(200) UNIQUE NOT NULL,
+  description TEXT NOT NULL,
+  difficulty Difficulty NOT NULL DEFAULT 'MEDIUM',
+  status RecipeStatus NOT NULL DEFAULT 'DRAFT',
+  prepTimeMinutes SMALLINT NOT NULL CHECK (prepTimeMinutes > 0),
+  tags VARCHAR(50)[] NOT NULL DEFAULT '{}',
+  ingredients JSONB NOT NULL,
+  nutritionalInfo JSONB,
+  coverImageUrl VARCHAR(512),
+  videoUrl VARCHAR(512),
+  authorId UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+  reviewedById UUID REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
+  publishedAt TIMESTAMPTZ,
+  createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updatedAt TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+TABLE sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  userId UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+  refreshToken VARCHAR(512) UNIQUE NOT NULL,
+  ipAddress VARCHAR(45),
+  userAgent TEXT,
+  expiresAt TIMESTAMPTZ NOT NULL,
+  createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+TABLE audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entityName VARCHAR(50) NOT NULL,
+  entityId UUID NOT NULL,
+  action VARCHAR(50) NOT NULL,
+  userId UUID REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE,
+  oldValues JSONB,
+  newValues JSONB,
+  createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+[DATABASE TRIGGERS & FUNCTIONS]
+- Function update_updated_at_column(): Automatically sets NEW."updatedAt" = NOW() on table update.
+- Triggers: trg_users_updated_at on users, trg_recipes_updated_at on recipes.
+
+[INDEXES]
+- idx_users_email: users(email) [B-Tree Unique]
+- idx_users_role_isactive: users(role, isActive) [B-Tree]
+- idx_recipes_slug: recipes(slug) [B-Tree Unique]
+- idx_recipes_status_diff: recipes(status, difficulty) [B-Tree Composite]
+- idx_recipes_authorid: recipes(authorId) [B-Tree]
+- idx_sessions_userid: sessions(userId) [B-Tree]
+- idx_audit_logs_entity: audit_logs(entityName, entityId) [B-Tree]
+
+
+# SECTION 5: BUSINESS RULES & STATE MACHINE
+[RECIPE LIFE CYCLE]
+1. Creation: Starts in status = 'DRAFT', authorId set to authenticated user (req.user.id).
+2. Ownership: Only the user matching recipe.authorId can execute PUT /recipes/:id.
+3. Deletion: Only recipe author or ADMIN can execute DELETE /recipes/:id.
+4. Approval (PUT /recipes/:id/approve):
+   - Restricted to CHEF and NUTRITIONIST roles (RBAC).
+   - Must be executed inside a single Prisma $transaction:
+     a) Update recipes SET status = 'APPROVED', reviewedById = req.user.id, publishedAt = NOW().
+     b) Insert into audit_logs (entityName='Recipe', entityId=recipe.id, action='APPROVE', userId=req.user.id, newValues={"status":"APPROVED"}).
+
+
+# SECTION 6: API ENDPOINTS SPECIFICATION (/api/v1)
+[MODULE: AUTH]
+- POST /api/v1/auth/register
+  Access: Public
+  Request Body: { email, password (min 8), firstName, lastName, role? }
+  Success: 201 Created -> { id, email, role }
+  Errors: 400 Bad Request (Validation failed), 409 Conflict (Email already in use)
+
+- POST /api/v1/auth/login
+  Access: Public
+  Request Body: { email, password }
+  Success: 200 OK -> { token, user: { id, email, role } }
+  Errors: 400 Bad Request, 401 Unauthorized (Invalid credentials)
+
+[MODULE: RECIPES]
+- GET /api/v1/recipes
+  Access: Public
+  Query Params: ?status=APPROVED&difficulty=EASY
+  Success: 200 OK -> Array of recipe cards
+
+- GET /api/v1/recipes/:id
+  Access: Public
+  URL Param: id (UUIDv4)
+  Success: 200 OK -> Full recipe detail
+  Errors: 400 Bad Request (Invalid UUID format), 404 Not Found
+
+- POST /api/v1/recipes
+  Access: Protected (USER, CHEF, NUTRITIONIST)
+  Headers: Authorization: Bearer <token>
+  Request Body: { title, description, difficulty, prepTimeMinutes (>0), tags, ingredients, nutritionalInfo?, coverImageUrl? }
+  Success: 201 Created -> Created recipe entity in DRAFT status
+  Errors: 400 Bad Request, 401 Unauthorized
+
+- PUT /api/v1/recipes/:id
+  Access: Protected (Author owner only)
+  Headers: Authorization: Bearer <token>
+  Success: 200 OK -> Updated recipe entity
+  Errors: 400 Bad Request, 401 Unauthorized, 403 Forbidden (Not recipe author), 404 Not Found
+
+- DELETE /api/v1/recipes/:id
+  Access: Protected (Author owner or ADMIN)
+  Headers: Authorization: Bearer <token>
+  Success: 200 OK -> Deletion confirmation
+  Errors: 401 Unauthorized, 403 Forbidden, 404 Not Found
+
+- PUT /api/v1/recipes/:id/approve
+  Access: Protected (CHEF, NUTRITIONIST only)
+  Headers: Authorization: Bearer <token>
+  Success: 200 OK -> Approved recipe entity + AuditLog entry
+  Errors: 401 Unauthorized, 403 Forbidden (USER cannot approve), 404 Not Found
+
+
+# SECTION 7: AI AGENT GOVERNANCE & INTERACTION
+[GOVERNANCE POLICY: ALWAYS, ASK, NEVER]
+- ALWAYS: Strongly type with TypeScript (no any), validate all inputs with Zod, wrap controllers in try/catch, format responses with JSend.
+- ASK: Modifying database migrations, executing destructive Git commands, altering folder structures, modifying package.json dependencies.
+- NEVER: NEVER TOUCH OR COMMIT .env. Never expose credentials, API keys or database URLs. Never bypass role checks or Zod validation.
