@@ -98,7 +98,7 @@ graph TD
 | PUT | `/api/v1/recipes/:id/approve`| Aprueba una receta (Cambio de estado). | Sí (CHEF, NUTRITIONIST)|
 
 > [!TIP]
-> Para una referencia exhaustiva, importa el archivo `Thunder Client Collection.json` incluido en la carpeta `/docs` de este repositorio directamente en tu extensión de VS Code.
+> Para una referencia exhaustiva, importa el archivo `Thunder Client Collection.json` incluido en la carpeta `/doc` de este repositorio directamente en tu extensión de VS Code.
 
 ---
 

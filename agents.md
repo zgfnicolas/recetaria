@@ -60,6 +60,9 @@ El flujo de trabajo debe ser atómico para mantener un historial inmaculado:
 
 | Directorio / Archivo | Función para la IA |
 | --- | --- |
+| `llm.txt` / `architecture.md` / `instructions.md` | **Nivel 1 (Raíz Consciente):** Directivas canónicas, macro-arquitectura y resumen hiper-denso. |
+| `.ai/` | **Nivel 2 (Arsenal Táctico):** Skills ejecutables, sub-agentes especializados y plantillas de prompts. |
+| `doc/` | **Nivel 3 y 4 (Especificación y Planes):** SDD (`architecture/`, `rules/`, `modules/`) y orquestación activa en `plan/`. |
 | `src/modules/` | Carpeta principal de trabajo (Users, Recipes, Auth). Contiene el patrón Router -> Controller -> Service -> Repository. |
 | `src/middlewares/` | Lógica transversal: Interceptores de JWT, validación Zod y RBAC (Roles). |
 | `prisma/schema.prisma` | **La Fuente de la Verdad:** Define la base de datos relacional y las entidades. (Solo lectura, modificar previo permiso). |

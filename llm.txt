@@ -1,0 +1,85 @@
+# RECETARIA API - LLM CONTEXT SPECIFICATION (SKL-PRO-001)
+# MODE: HYPER-DENSE / MACHINE-OPTIMIZED / TOKEN-MINIMIZED
+
+[PROJECT]
+NAME: Recetaria (Fase 1: MVP Backend API)
+STACK: Node.js 18+ | Express | TypeScript (Strict) | PostgreSQL 15+ | Prisma ORM | Zod | Bcrypt | JWT
+GOAL: Academic MVP for recipe sharing, with role-based clinical/culinary validation (RBAC).
+
+[ARCHITECTURE: 4-LAYER MONOLITH]
+FLOW: Request -> Router -> Middlewares (Auth, RBAC, Zod) -> Controller -> Service -> Repository (Prisma) -> DB
+RULE 1: Service layer NEVER accesses Prisma directly; MUST call Repository.
+RULE 2: Controller layer only handles HTTP req/res, error mapping, and delegates logic to Service.
+RULE 3: Every controller wrapped in try/catch returning standardized JSend JSON envelopes.
+RULE 4: Stateless session architecture using Bearer JWT tokens.
+
+[RESPONSE ENVELOPE: JSEND EXTENDED]
+2xx: { "success": true, "statusCode": 200|201, "data": {...}|[...], "message": "string" }
+4xx/5xx: { "success": false, "statusCode": 400|401|403|404|409|500, "message": "string", "errors": [] }
+
+[DATA MODELS & ENUMS]
+ENUM Role: USER | CHEF | NUTRITIONIST | ADMIN
+ENUM RecipeStatus: DRAFT | PENDING_REVIEW | APPROVED | REJECTED | ARCHIVED
+ENUM Difficulty: EASY | MEDIUM | HARD | EXPERT
+
+TABLE users:
+- id: UUID PK default(gen_random_uuid())
+- email: VARCHAR(255) UNIQUE NOT NULL
+- passwordHash: VARCHAR(255) NOT NULL
+- firstName: VARCHAR(100) NOT NULL
+- lastName: VARCHAR(100) NOT NULL
+- role: Role NOT NULL default(USER)
+- isActive: BOOLEAN NOT NULL default(true)
+- createdAt, updatedAt: TIMESTAMPTZ NOT NULL default(now())
+
+TABLE recipes:
+- id: UUID PK default(gen_random_uuid())
+- title: VARCHAR(150) NOT NULL
+- slug: VARCHAR(200) UNIQUE NOT NULL
+- description: TEXT NOT NULL
+- difficulty: Difficulty NOT NULL default(MEDIUM)
+- status: RecipeStatus NOT NULL default(DRAFT)
+- prepTimeMinutes: SMALLINT NOT NULL (CHECK > 0)
+- tags: VARCHAR(50)[] NOT NULL default({})
+- ingredients: JSONB NOT NULL
+- nutritionalInfo: JSONB NULL
+- coverImageUrl, videoUrl: VARCHAR(512) NULL
+- authorId: UUID FK -> users(id) ON DELETE RESTRICT ON UPDATE CASCADE
+- reviewedById: UUID NULL FK -> users(id) ON DELETE SET NULL ON UPDATE CASCADE
+- publishedAt: TIMESTAMPTZ NULL
+- createdAt, updatedAt: TIMESTAMPTZ NOT NULL default(now())
+
+TABLE sessions:
+- id: UUID PK default(gen_random_uuid())
+- userId: UUID FK -> users(id) ON DELETE CASCADE
+- refreshToken: VARCHAR(512) UNIQUE NOT NULL
+- ipAddress, userAgent: VARCHAR/TEXT
+- expiresAt, createdAt: TIMESTAMPTZ NOT NULL
+
+TABLE audit_logs:
+- id: UUID PK default(gen_random_uuid())
+- entityName: VARCHAR(50) NOT NULL
+- entityId: UUID NOT NULL
+- action: VARCHAR(50) NOT NULL (e.g. APPROVE, REJECT)
+- userId: UUID NULL FK -> users(id) ON DELETE SET NULL
+- oldValues, newValues: JSONB NULL
+- createdAt: TIMESTAMPTZ NOT NULL default(now())
+
+[ENDPOINTS: /api/v1]
+AUTH:
+- POST /auth/register: Public -> 201 Created (Hash password via Bcrypt)
+- POST /auth/login: Public -> 200 OK + JWT Token (payload: { id, role })
+
+RECIPES:
+- GET /recipes: Public -> 200 OK (Query params: ?status=APPROVED&difficulty=EASY)
+- GET /recipes/:id: Public -> 200 OK (Param: UUIDv4)
+- POST /recipes: Auth (USER, CHEF, NUTRITIONIST) -> 201 Created (Default status: DRAFT, authorId: req.user.id)
+- PUT /recipes/:id: Auth (Author owner only) -> 200 OK
+- DELETE /recipes/:id: Auth (Author owner or ADMIN) -> 200 OK
+- PUT /recipes/:id/approve: Auth (CHEF, NUTRITIONIST only) -> 200 OK (Updates status=APPROVED, creates AuditLog inside Prisma $transaction)
+
+[CRITICAL INVARIANTS]
+1. Never bypass Zod validation middleware.
+2. Never store secrets in code/git; use process.env and .env.example.
+3. On status update to APPROVED, reviewedById and audit_logs entry are mandatory.
+4. Recipes cannot be hard-deleted if referenced; maintain relational integrity.
