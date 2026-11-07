@@ -124,8 +124,6 @@ Para validar su contenido frente a los usuarios finales.
 * **Operativos:** Complejidad en la manipulación de arrays y JSONB en PostgreSQL a través de Prisma.
 * *Mitigación:* Restringir las operaciones de filtrado iniciales a campos planos indexados (dificultad, categoría) y dejar el parseo avanzado del JSONB de ingredientes para el lado del cliente (Frontend) o futuras iteraciones.
 
-
-
 **Responsable del modelo:** Facundo Nicolás González
 **Fecha de revisión:** 06/11/2026
-**Documentos de referencia:** Trabajo práctico integrador: Tu propia API REST (Bootcamp 5.0)
+**Documentos de referencia:** Trabajo práctico integrador
