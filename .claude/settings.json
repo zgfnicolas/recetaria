@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/partial-claude-code-settings.json",
+  "model": "claude-3-7-sonnet-20250219",
+  "permissions": {
+    "allowFileSystemRead": true,
+    "allowFileSystemWrite": true,
+    "allowTerminalCommands": true
+  },
+  "hooks": {
+    "preCommand": [
+      {
+        "command": "bash .claude/hooks/validate-bash.sh",
+        "description": "Valida comandos de shell antes de su ejecución para prevenir acciones destructivas o fugas de secretos"
+      }
+    ]
+  },
+  "rulesDirectory": ".claude/rules",
+  "skillsDirectory": ".claude/skills",
+  "agentsDirectory": ".claude/agents"
+}
