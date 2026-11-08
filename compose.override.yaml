@@ -1,0 +1,37 @@
+services:
+  api:
+    build:
+      context: .
+      target: development
+    image: recetaria/api:dev
+    read_only: false
+    environment:
+      NODE_ENV: development
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      JWT_SECRET: ${JWT_SECRET:-dev_only_jwt_secret_do_not_use_in_prod}
+    ports:
+      - "127.0.0.1:${PORT:-3000}:3000"
+    volumes:
+      - ./src:/app/src:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./database_schema_init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+
+  adminer:
+    image: adminer:4.8.1
+    restart: unless-stopped
+    profiles:
+      - debug
+    ports:
+      - "127.0.0.1:8080:8080"
+    networks:
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy

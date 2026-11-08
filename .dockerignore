@@ -1,0 +1,40 @@
+# .dockerignore - SKL-DEVOPS-DKR-001
+# Exclusión de contexto para optimizar BuildKit, velocidad de compilación y seguridad
+
+# Control de versiones
+.git
+.gitignore
+
+# Dependencias y artefactos locales (evita colisión de binarios host Windows vs contenedor Linux)
+node_modules
+dist
+build
+coverage
+.nyc_output
+*.tsbuildinfo
+
+# Logs y temporales
+logs
+*.log
+npm-debug.log*
+tmp
+.cache
+.turbo
+
+# Variables de entorno y secretos (RF-07 / Antipatrón 3 / Regla NEVER)
+.env
+.env.*
+!.env.example
+
+# Archivos de configuración de IA y documentación (no requeridos en imagen de build/runtime)
+.ai
+.claude
+.agents
+.cursor
+.devin
+.mcp.json
+docs
+*.md
+database_schema_init.sql
+compose*.yaml
+docker-compose*.yml

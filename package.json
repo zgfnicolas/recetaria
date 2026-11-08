@@ -7,6 +7,15 @@
     "doc": "docs"
   },
   "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "docker:config": "docker compose config -q",
+    "docker:db": "docker compose up -d postgres",
+    "docker:dev": "docker compose up --build",
+    "docker:debug": "docker compose --profile debug up -d",
+    "docker:prod": "docker compose -f compose.yaml up --build -d",
+    "docker:down": "docker compose down",
     "test": "echo \"Error: no test specified\" && exit 1",
     "postinstall": "prisma skills sync || exit 0"
   },
