@@ -1,14 +1,13 @@
 # Modelo de datos
 
-Fuente de verdad del esquema SQL inicial: [`database_schema_init.sql`](../database_schema_init.sql) (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales).
+Fuente de verdad del esquema SQL inicial: [`database_schema_init.sql`](../database_schema_init.sql) (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y semillas iniciales de prueba para los 4 roles RBAC.
 
 ## Diagrama ER
 ```mermaid
 erDiagram
   USERS ||--o{ RECIPES : "crea (authorId)"
   USERS ||--o{ RECIPES : "aprueba (reviewedById)"
-  USERS ||--o{ SESSIONS : "mantiene"
-  USERS ||--o{ AUDIT_LOGS : "genera"
+  USERS ||--o{ AUDIT_LOGS : "genera (userId)"
 
   USERS {
     uuid id PK
@@ -42,16 +41,6 @@ erDiagram
     timestamptz updatedAt
   }
 
-  SESSIONS {
-    uuid id PK
-    uuid userId FK
-    varchar refreshToken UK
-    varchar ipAddress
-    text userAgent
-    timestamptz expiresAt
-    timestamptz createdAt
-  }
-
   AUDIT_LOGS {
     uuid id PK
     varchar entityName
@@ -68,7 +57,7 @@ erDiagram
 
 ### Enumeraciones (`ENUM`)
 - `Role`: `USER`, `CHEF`, `NUTRITIONIST`, `ADMIN`
-- `RecipeStatus`: `DRAFT`, `PENDING_REVIEW`, `APPROVED`, `REJECTED`, `ARCHIVED`
+- `RecipeStatus`: `DRAFT`, `APPROVED`
 - `Difficulty`: `EASY`, `MEDIUM`, `HARD`, `EXPERT`
 
 ### Tabla `users`
@@ -93,65 +82,52 @@ Entidad principal con el contenido, metadatos nutricionales y estado de validaci
 |---|---|:-:|---|
 | `id` | `UUID` | No | Identificador único (`PK`, `gen_random_uuid()`) |
 | `title` | `VARCHAR(150)` | No | Título de la receta |
-| `slug` | `VARCHAR(200)` | No | Identificador legible para URLs (`UNIQUE`) |
+| `slug` | `VARCHAR(200)` | No | Identificador legible autogenerado (`UNIQUE`) |
 | `description` | `TEXT` | No | Descripción e instrucciones del plato |
 | `difficulty` | `Difficulty` | No | Complejidad, por defecto `'MEDIUM'` |
-| `status` | `RecipeStatus` | No | Estado de revisión, por defecto `'DRAFT'` |
-| `prepTimeMinutes` | `SMALLINT` | No | Tiempo en minutos (`CHECK ("prepTimeMinutes" > 0)`) |
+| `status` | `RecipeStatus` | No | Estado de validación (`DRAFT` o `APPROVED`), por defecto `'DRAFT'` |
+| `prepTimeMinutes` | `SMALLINT` | No | Tiempo en minutos (`CHECK ("prepTimeMinutes" > 0 AND "prepTimeMinutes" <= 1440)`) |
 | `tags` | `VARCHAR(50)[]` | No | Etiquetas dietarias, por defecto `'{}'` |
-| `ingredients` | `JSONB` | No | Lista estructurada de ingredientes y cantidades |
-| `nutritionalInfo` | `JSONB` | Sí | Información nutricional validada |
+| `ingredients` | `JSONB` | No | Lista estructurada de ingredientes (`name`, `quantity`, `unit`) |
+| `nutritionalInfo` | `JSONB` | Sí | Información nutricional opcional |
 | `coverImageUrl` | `VARCHAR(512)` | Sí | URL de portada |
 | `videoUrl` | `VARCHAR(512)` | Sí | URL de video corto |
 | `authorId` | `UUID (FK)` | No | Autor que creó la receta (`-> users.id`) |
-| `reviewedById` | `UUID (FK)` | Sí | Profesional que aprobó/revisó (`-> users.id`) |
-| `publishedAt` | `TIMESTAMPTZ` | Sí | Fecha y hora de publicación/aprobación |
+| `reviewedById` | `UUID (FK)` | Sí | Profesional que aprobó la receta (`-> users.id`) |
+| `publishedAt` | `TIMESTAMPTZ` | Sí | Fecha y hora de aprobación |
 | `createdAt` | `TIMESTAMPTZ` | No | Fecha de creación (`NOW()`) |
 | `updatedAt` | `TIMESTAMPTZ` | No | Última actualización (trigger automático) |
 
-### Tabla `sessions`
-Registra refresh tokens y huella de sesiones activas.
-
-| Campo | Tipo | Nulo | Descripción |
-|---|---|:-:|---|
-| `id` | `UUID` | No | Identificador de sesión (`PK`) |
-| `userId` | `UUID (FK)` | No | Usuario dueño de la sesión (`-> users.id`) |
-| `refreshToken` | `VARCHAR(512)` | No | Token único de refresco (`UNIQUE`) |
-| `ipAddress` | `VARCHAR(45)` | Sí | Dirección IP de origen (IPv4/IPv6) |
-| `userAgent` | `TEXT` | Sí | Agente cliente del dispositivo |
-| `expiresAt` | `TIMESTAMPTZ` | No | Expiración del token |
-| `createdAt` | `TIMESTAMPTZ` | No | Fecha de emisión (`NOW()`) |
-
 ### Tabla `audit_logs`
-Registro inmutable de trazabilidad sobre cambios de estado críticos (RN-06).
+Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO_DRAFT`, `DELETE`).
 
 | Campo | Tipo | Nulo | Descripción |
 |---|---|:-:|---|
 | `id` | `UUID` | No | Identificador del evento (`PK`) |
 | `entityName` | `VARCHAR(50)` | No | Nombre de la entidad afectada (ej. `'Recipe'`) |
-| `entityId` | `UUID` | No | ID del registro alterado |
-| `action` | `VARCHAR(50)` | No | Acción ejecutada (ej. `'APPROVE'`, `'REJECT'`) |
+| `entityId` | `UUID` | No | ID del registro alterado (sin FK hacia `recipes` para conservar trazabilidad tras `DELETE`) |
+| `action` | `VARCHAR(50)` | No | Acción ejecutada (`'APPROVE'`, `'RESET_TO_DRAFT'`, `'DELETE'`) |
 | `userId` | `UUID (FK)` | Sí | Usuario que ejecutó la acción (`-> users.id`) |
 | `oldValues` | `JSONB` | Sí | Snapshot previo al cambio |
 | `newValues` | `JSONB` | Sí | Snapshot posterior al cambio |
 | `createdAt` | `TIMESTAMPTZ` | No | Marca temporal del evento (`NOW()`) |
 
-### Índices y triggers
-- **Índices B-Tree:** `idx_users_email`, `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_recipes_slug`, `idx_sessions_userid`, `idx_audit_logs_entity`, `idx_audit_logs_createdat`.
+### Índices, triggers y datos semilla
+- **Índices B-Tree:** `idx_users_email`, `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_recipes_slug`, `idx_audit_logs_entity`, `idx_audit_logs_createdat`.
 - **Triggers:** `trg_users_updated_at` y `trg_recipes_updated_at` ejecutan `update_updated_at_column()` en `BEFORE UPDATE` para actualizar `"updatedAt" = NOW()`.
+- **Seed inicial:** `database_schema_init.sql` inserta con `ON CONFLICT (email) DO NOTHING` 4 usuarios iniciales (`user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com`, `admin@recetaria.com`) para facilitar pruebas de roles.
 
 ## Políticas referenciales
 | Relación | Al borrar el padre | Motivo |
 |---|---|---|
-| `users → recipes (authorId)` | `RESTRICT` | Impide borrar un usuario si tiene recetas asociadas; obliga a usar baja lógica (`isActive = false`) |
-| `users → recipes (reviewedById)` | `SET NULL` | Preserva la receta si se da de baja el usuario revisor; el historial sigue en `audit_logs` |
-| `users → audit_logs (userId)` | `SET NULL` | Garantiza la inmutabilidad y trazabilidad histórica del log aunque se elimine el usuario |
-| `users → sessions (userId)` | `CASCADE` | **Justificación:** las sesiones y refresh tokens carecen de valor sin el usuario y deben revocarse de inmediato al eliminar la cuenta |
+| `users → recipes (authorId)` | `RESTRICT` | Impide borrar físicamente un usuario si tiene recetas asociadas; obliga a preservar autoría |
+| `users → recipes (reviewedById)` | `SET NULL` | Preserva la receta si se da de baja el usuario revisor; el historial permanece en `audit_logs` |
+| `users → audit_logs (userId)` | `SET NULL` | Garantiza la inmutabilidad del registro de auditoría aunque se elimine el usuario |
+| `audit_logs.entityId` (sin FK a `recipes`) | `N/A` (conservado) | Permite ejecutar borrado físico en `DELETE /api/v1/recipes/:id` manteniendo íntegro el registro histórico del evento `DELETE` |
 
 ## Datos sensibles
 | Campo | Clasificación | Tratamiento |
 |---|---|---|
 | `users.email` | Identificación personal | Acceso autenticado; nunca se expone en errores de login ni logs |
 | `users.passwordHash` | Credencial crítica | Hash unidireccional Bcrypt (`saltRounds >= 10`); excluido de respuestas JSON |
-| `sessions.ipAddress` / `userAgent` | Telemetría personal | Uso exclusivo para seguridad y detección de sesiones; alcance detallado en [`compliance.md`](compliance.md) |
 | `recipes.nutritionalInfo` / `tags` | Salud implícita (Ley 25.326) | Validación estricta con Zod; aprobación restringida a perfiles `CHEF` / `NUTRITIONIST` |

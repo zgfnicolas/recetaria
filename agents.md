@@ -23,6 +23,7 @@ Corré `npm run build` y `npm test` antes de dar una tarea por terminada.
 Una capa solo importa de la siguiente. Los servicios y controladores nunca llaman a Prisma directamente. Detalle: `docs/sad.md`.
 
 ## Dónde está cada cosa
+- Glosario de dominio: @GLOSSARY.md
 - Requisitos del producto: @docs/prd.md
 - Reglas de negocio: @docs/business_rules.md
 - Roles y permisos: @docs/roles.md
@@ -37,8 +38,8 @@ Una capa solo importa de la siguiente. Los servicios y controladores nunca llama
 - Solo el autor (`recipe.authorId === req.user.id`) puede editar su receta (`RN-02`)
 - Solo el autor o `ADMIN` pueden eliminar una receta (`RN-03`)
 - Solo `CHEF` o `NUTRITIONIST` pueden aprobar recetas (`RN-04`) y no pueden auto-aprobar las propias (`RN-05`)
-- Toda aprobación ejecuta actualización de `recipes` e inserción en `audit_logs` dentro de `prisma.$transaction` (`RN-06`)
-- `prepTimeMinutes > 0` y al menos un ingrediente válido en `ingredients` (`RN-07`); contraseñas con Bcrypt `>= 10` rounds (`RN-08`)
+- Toda aprobación (`APPROVE`), reinicio por edición (`RESET_TO_DRAFT`) y borrado (`DELETE`) ejecuta actualización/borrado de `recipes` e inserción en `audit_logs` dentro de `prisma.$transaction` (`RN-06`)
+- `prepTimeMinutes` entre `1` y `1440` y al menos un ingrediente válido (`quantity > 0`) en `ingredients` (`RN-07`); contraseñas con Bcrypt `>= 10` rounds (`RN-08`)
 
 ## Convenciones
 - TypeScript estricto: prohibido `any`; inferir DTOs con `z.infer<typeof schema>`
