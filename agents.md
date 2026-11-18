@@ -1,77 +1,61 @@
-### Identificación del Proyecto
+# AGENTS.md
 
-| Campo | Detalles |
-| --- | --- |
-| **Nombre del Proyecto** | Recetaria (Fase 1: MVP Backend API) - Contexto de Agente IA |
-| **Versión / Revisión** | 1.0.0 |
-| **Fecha de Creación** | 06/11/2026 |
-| **Estado** | Aprobado |
-| **Responsable Técnico** | Facundo Nicolás González |
-| **Fecha de Última Revisión** | 06/11/2026 |
-| **Recursos** | Trabajo práctico integrador, `schema.prisma` |
+## Proyecto
+Recetaria API — MVP Backend REST para publicar y validar recetas con control de acceso por roles (RBAC). Detalle del producto: `docs/prd.md`.
 
-### 1. Directivas Técnicas y Mandato del Sistema
+## Comandos
+```bash
+npm install          # dependencias
+npm run docker:db    # PostgreSQL 15 en segundo plano
+npm run dev          # servidor local en http://localhost:3000
+npm run build        # compila TypeScript y valida tipos
+npm test             # tests unitarios e integración
+npm run docker:config # valida compose.yaml + compose.override.yaml
+```
+Corré `npm run build` y `npm test` antes de dar una tarea por terminada.
 
-**Propósito Operativo:** Desarrollar y mantener la API REST del proyecto "Recetaria", garantizando el cumplimiento estricto de los requisitos técnicos del sistema (arquitectura en 4 capas desacopladas, tipado estricto en TypeScript, validación con esquemas Zod, autenticación JWT stateless y controladores con try/catch y retorno JSend).
+## Arquitectura en 4 capas
+1. Transporte: `src/modules/*/router.ts` y `src/middlewares/` — rutas HTTP, validación Zod, JWT y RBAC
+2. Controladores: `src/modules/*/controller.ts` — solo `req`/`res`, `try/catch` obligatorio y respuesta JSend
+3. Negocio: `src/modules/*/service.ts` — toda la lógica de dominio y coordinación de transacciones
+4. Persistencia: `src/modules/*/repository.ts` — único lugar que instancia o llama a Prisma Client
 
-* **Axioma principal:** El código debe ser modular, simple y mantener una separación estricta de responsabilidades (Routing -> Controladores -> Servicios -> Repositorios).
-* **Enfoque de Ejecución:** Focalizar en **cambios cortos, específicos y focalizados**. Resolver un problema a la vez de forma atómica. Priorizar siempre la legibilidad y el cumplimiento de los esquemas de validación (Zod) antes de proponer cualquier lógica adicional.
+Una capa solo importa de la siguiente. Los servicios y controladores nunca llaman a Prisma directamente. Detalle: `docs/sad.md`.
 
-### 2. Contexto del Proyecto
+## Dónde está cada cosa
+- Requisitos del producto: @docs/prd.md
+- Reglas de negocio: @docs/business_rules.md
+- Roles y permisos: @docs/roles.md
+- Arquitectura y contrato JSend: @docs/sad.md
+- Modelo de datos: @docs/data_model.md
+- Esquema SQL inicial: @database_schema_init.sql
+- Decisiones técnicas: `docs/adr/`
+- Estrategia de pruebas: `docs/testing.md`
 
-* **Propósito:** Backend para una plataforma donde los usuarios buscan y publican recetas, las cuales son validadas y categorizadas por profesionales (Nutricionistas y Chefs) mediante un sistema estricto de roles.
-* **Ecosistema tecnológico:** Node.js, Express, TypeScript, Prisma ORM, PostgreSQL, Zod (Validación), Bcrypt y JSON Web Tokens (JWT).
-* **Objetivo actual:** Finalizar el MVP Académico (Semana 2 del Bootcamp) enfocado exclusivamente en las entidades `User` y `Recipe`, aprobando el CRUD, autenticación, middlewares y relaciones base.
+## Reglas inviolables
+- Toda receta nueva inicia en `DRAFT` con `authorId` del token JWT (`RN-01`)
+- Solo el autor (`recipe.authorId === req.user.id`) puede editar su receta (`RN-02`)
+- Solo el autor o `ADMIN` pueden eliminar una receta (`RN-03`)
+- Solo `CHEF` o `NUTRITIONIST` pueden aprobar recetas (`RN-04`) y no pueden auto-aprobar las propias (`RN-05`)
+- Toda aprobación ejecuta actualización de `recipes` e inserción en `audit_logs` dentro de `prisma.$transaction` (`RN-06`)
+- `prepTimeMinutes > 0` y al menos un ingrediente válido en `ingredients` (`RN-07`); contraseñas con Bcrypt `>= 10` rounds (`RN-08`)
 
-### 3. El Sistema de gobernanza: "Always, ask, never"
+## Convenciones
+- TypeScript estricto: prohibido `any`; inferir DTOs con `z.infer<typeof schema>`
+- Archivos de código en `kebab-case.ts`; clases e interfaces en `PascalCase`
+- Contrato de respuesta JSend en todos los endpoints bajo `/api/v1`
+- Commits con Conventional Commits (`feat(modulo): ...`, `fix(modulo): ...`); sugerir rama modular para cada feature o fix
 
-Para maximizar la eficiencia y evitar introducir deuda técnica o fallos catastróficos en el repositorio, el agente debe regirse por los siguientes niveles de acción:
+## Límites
+No hagas sin pedir confirmación humana explícita:
+- Crear o modificar migraciones o esquemas de base de datos (`prisma migrate`, `db push`)
+- Modificar `package.json` o instalar/quitar dependencias
+- Borrar archivos o datos
+- Tocar `.env`, `secrets/` o configuración de Docker/CI
+- Ejecutar comandos de Git que alteren historial (`commit`, `push`, `reset`, `checkout`)
 
-| Nivel | Acciones Permitidas / Mandatos |
-| --- | --- |
-| **Always (Siempre)** | Focalizarse en el código actual. Tipar fuertemente con TypeScript, sugerir implementaciones de controladores o servicios atómicos, ejecutar linters estáticos, y asegurar que cada controlador tenga su bloque `try/catch`. |
-| **Ask (Preguntar)** | **(RESTRICCIÓN ESTRICTA):** Ejecutar comandos de git, correr migraciones de base de datos (`npx prisma migrate / db push`), alterar la arquitectura de carpetas, cambiar versiones en el `package.json`, o añadir/quitar librerías. Todo esto requiere confirmación explícita del humano. |
-| **Never (Nunca)** | **PROHIBIDO TOCAR EL ARCHIVO `.env`.** Nunca exponer claves API o cadenas de conexión. Nunca inyectar dependencias circulares ni saltarse la validación de roles y esquemas. |
+## Si algo no está claro
+Si el pedido, el plan o las reglas se contradicen, o falta información, detenete y preguntá antes de escribir código. No supongas.
 
-### 4. Arquitectura y reglas de capas
-
-El agente debe respetar ciegamente los límites arquitectónicos definidos para los componentes (`/modules`). Las violaciones de estas fronteras deben ser reportadas antes de escribir código.
-
-* **Regla de oro:** La capa de `Service` (reglas de negocio) nunca debe instanciar a Prisma directamente; debe llamar a la capa de `Repository`. Los `Controllers` solo manejan los objetos `req` y `res`, delegando toda la lógica al `Service`.
-* **Manejo de errores:** Todo error predecible debe ser capturado y formateado antes de llegar al cliente (ej. Errores de Zod retornan 400; Errores de Prisma como `Unique constraint` retornan 409).
-
-### 5. Contrato de validación (Build/Test)
-
-Antes de dar por finalizada una tarea, el agente debe asegurar que el código esté listo para el bucle de retroalimentación humano:
-
-1. **Transpilación:** El código TypeScript sugerido no debe arrojar errores de tipo `any` implícito.
-2. **Consistencia Zod:** Si se altera el esquema de Prisma, el agente debe recordar actualizar el `schema` de validación de Zod correspondiente.
-3. **Pruebas de Integración:** Verificar mentalmente si el endpoint sugerido pasaría la prueba de Thunder Client exigida por la rúbrica (Manejo de 200, 201, 400, 401, 403, 404).
-
-### 6. Registro de cambios, Flujo Git y Decisiones
-
-El flujo de trabajo debe ser atómico para mantener un historial inmaculado:
-
-* **Ramas (GitFlow):** Para cada nueva feature o fix sugerido, el agente **debe analizar y sugerir la creación de una rama modular**. Ejemplo: *"Te sugiero crear la rama `feature/recipe-filters` para implementar esto"*.
-* **Formato de Commit:** Sugerir siempre mensajes de commit atómicos y semánticos (Conventional Commits). Ejemplo: `feat(recipes): agregar filtro de dificultad en el servicio` o `fix(auth): manejar expiración de token JWT`.
-* **ADR (Decisiones):** No re-litigar el stack. PostgreSQL y Prisma son las decisiones finales del proyecto.
-
-### 7. Mapa de directorios críticos
-
-| Directorio / Archivo | Función para la IA |
-| --- | --- |
-| `llm.txt` / `architecture.md` / `instructions.md` | **Nivel 1 (Raíz Consciente):** Directivas canónicas, macro-arquitectura y resumen hiper-denso. |
-| `.ai/` | **Nivel 2 (Arsenal Táctico):** Skills ejecutables, sub-agentes especializados y plantillas de prompts. |
-| `doc/` | **Nivel 3 y 4 (Especificación y Planes):** SDD (`architecture/`, `rules/`, `modules/`) y orquestación activa en `plan/`. |
-| `src/modules/` | Carpeta principal de trabajo (Users, Recipes, Auth). Contiene el patrón Router -> Controller -> Service -> Repository. |
-| `src/middlewares/` | Lógica transversal: Interceptores de JWT, validación Zod y RBAC (Roles). |
-| `prisma/schema.prisma` | **La Fuente de la Verdad:** Define la base de datos relacional y las entidades. (Solo lectura, modificar previo permiso). |
-| `.env.example` | Plantilla segura de variables de entorno para usar de referencia. |
-
-### 8. Protocolo de Handoff
-
-Si el agente de IA se encuentra ante una instrucción del usuario que rompe la arquitectura del sistema, que solicita modificar el archivo `.env`, o ejecutar un comando de migración destructivo, el agente **debe detenerse inmediatamente**, explicar el riesgo técnico o la violación a la regla de gobernanza, y solicitar directivas al usuario (Facundo) para proceder de forma segura.
-
-**Responsable del modelo:** Facundo Nicolás González
-**Fecha de revisión:** 06/11/2026
-**Documentos de referencia:** Trabajo práctico integrador
+## Trabajo con planes
+Si existe un plan activo en `docs/plans/`, ejecutá solo la fase indicada y detenete al terminarla para que se revise.

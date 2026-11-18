@@ -1,0 +1,31 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/settings.json",
+  "agentMode": "default",
+  "enableTerminalSandbox": true,
+  "permissions": {
+    "allow": [
+      "command(npm test)",
+      "command(regex:npm run (build|dev|docker:config|docker:db|docker:down))",
+      "command(npx prisma validate)",
+      "command(git status)",
+      "command(git diff)",
+      "command(git log)"
+    ],
+    "ask": [
+      "command(regex:git (commit|push|checkout|switch|merge|rebase).*)",
+      "command(npm install)",
+      "command(regex:npx prisma (migrate|db push).*)",
+      "mcp(*)"
+    ],
+    "deny": [
+      "read_file(.env)",
+      "write_file(.env)",
+      "write_file(secrets/)",
+      "read_file(secrets/)",
+      "command(cat .env)",
+      "write_file(.git/)",
+      "command(sudo)",
+      "command(rm -rf)"
+    ]
+  }
+}

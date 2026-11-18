@@ -27,14 +27,12 @@ tmp
 !.env.example
 
 # Archivos de configuración de IA y documentación (no requeridos en imagen de build/runtime)
-.ai
-.claude
 .agents
-.cursor
-.devin
-.mcp.json
+.github
+scripts
 docs
 *.md
+LICENSE
 database_schema_init.sql
 compose*.yaml
 docker-compose*.yml

@@ -1,129 +1,87 @@
-### Identificación del Proyecto
+# PRD — Recetaria API
+Versión 1.1 · Última actualización: 2026-11-17 · Responsable: Facundo Nicolás González
 
-| Campo | Detalles |
-| --- | --- |
-| **Nombre del Proyecto** | Recetaria (Fase 1: MVP Backend API) |
-| **Versión / Revisión** | 1.0.0 |
-| **Fecha de Creación** | 06/11/2026 |
-| **Estado** | En Revisión |
-| **Responsable Técnico** | Facundo Nicolás González |
-| **Responsable Estratégico** | Facundo Nicolás González |
-| **Fecha de Emisión** | 06/11/2026 |
+## 1. Visión
+Centralizar un catálogo confiable de recetas gastronómicas donde el contenido generado por la comunidad es validado clínica y culinariamente por nutricionistas y chefs profesionales.
 
-### 1. Resumen ejecutivo
+## 2. Problema
+Los usuarios con necesidades alimentarias específicas (celiaquía, diabetes, dietas deportivas) sufren desinformación nutricional al buscar recetas en plataformas genéricas. Al mismo tiempo, los profesionales de la salud y la gastronomía carecen de un espacio estructurado para auditar contenido y respaldarlo con trazabilidad.
 
-**1.1. Definición del problema**
-Los usuarios finales sufren desinformación nutricional y frustración al buscar recetas que se adapten a sus condiciones de salud específicas (celiaquía, diabetes, etc.) en plataformas genéricas. Al mismo tiempo, los profesionales (nutricionistas y chefs) carecen de un espacio centralizado donde puedan validar contenido, aportar autoridad y construir su reputación digital de forma estructurada.
+## 3. Público objetivo
+- **Usuario principal (USER):** personas registradas que publican, buscan y filtran recetas adaptadas a sus tiempos y restricciones dietarias.
+- **Usuario validador (CHEF / NUTRITIONIST):** profesionales que aportan recetas verificadas y auditan recetas de terceros.
+- **Usuario administrador (ADMIN):** personal interno encargado del gobierno de la plataforma y moderación general.
+- **Usuario público (Guest):** visitantes sin sesión que exploran recetas aprobadas.
 
-**1.2. Solución propuesta**
-Se desarrollará una API REST escalable que centraliza un motor de recetas. El sistema permitirá a los usuarios buscar, filtrar y publicar recetas, integrando un flujo de validación basado en roles (RBAC) donde profesionales de la salud y la gastronomía auditan y aprueban el contenido. Esto alivia el problema de la desinformación garantizando un catálogo de recetas confiable y clínicamente seguro.
+## 4. Propuesta de valor
+Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de aprobación profesional basado en roles (RBAC) y auditoría transaccional en base de datos, evitando la desinformación nutricional y garantizando integridad en cada cambio de estado.
 
-**1.3. Valor diferenciador**
-Recetaria es única porque cruza el Contenido Generado por el Usuario (UGC) con un sistema de auditoría profesional estricta. Técnicamente, se diferencia por una arquitectura basada en componentes con Node.js, TypeScript y PostgreSQL (Prisma), garantizando integridad referencial estricta, validaciones de esquema (Zod) previas a la base de datos y un diseño de datos preparado nativamente para escalar hacia una red social interactiva.
+## 5. Alcance
+### Incluido en la versión 1 (MVP)
+- Registro e inicio de sesión mediante Bcrypt y JSON Web Tokens (JWT) stateless.
+- CRUD completo de recetas (`POST`, `GET`, `PUT`, `DELETE`) con validación de esquemas Zod.
+- Búsqueda y filtrado de recetas mediante query params (`status`, `difficulty`).
+- Flujo de aprobación profesional (`PUT /api/v1/recipes/:id/approve`) restringido a `CHEF` y `NUTRITIONIST` con registro en `audit_logs`.
+- Contratos HTTP estandarizados bajo formato JSend.
 
-### 2. Objetivos y métricas de éxito (KPIs)
+### Fuera de alcance
+- Funcionalidades sociales secundarias (likes, comentarios, seguidores y perfiles extendidos).
+- Subida física de archivos multimedia a object storage (AWS S3) y verificación KYC automatizada de matrículas profesionales.
+- Generador automático de planes alimenticios semanales (`MealPlans`) y listas de compras.
+- Interfaz frontend web o aplicación móvil nativa.
 
-| Métrica | Definición | Objetivo (Target) |
-| --- | --- | --- |
-| **Velocidad de Entrega** | Cumplimiento del alcance funcional para el TP Integrador dentro del plazo estricto. | 100% de los endpoints requeridos en 2 semanas. |
-| **Calidad del Código** | Número de defectos detectados en pruebas de integración (Thunder Client / Supertest). | < 5% error rate (Cobertura total de validaciones HTTP 400/401/404). |
-| **Rendimiento (P95)** | Latencia máxima en el 95% de las solicitudes de lectura (GET Recipes). | < 150ms |
-| **Trazabilidad** | Porcentaje de acciones críticas (aprobación/rechazo de recetas) registradas en auditoría. | 100% |
+## 6. Historias de usuario
+| ID | Como... | Quiero... | Para... | Prioridad |
+|---|---|---|---|---|
+| HU-01 | usuario no autenticado | registrarme con email, nombre, apellido y contraseña | crear una cuenta segura en la plataforma | Alta |
+| HU-02 | usuario registrado | iniciar sesión con email y contraseña | obtener un JWT válido y operar rutas protegidas | Alta |
+| HU-03 | usuario autenticado | crear una receta con ingredientes y tiempo de preparación | compartirla en estado borrador (`DRAFT`) | Alta |
+| HU-04 | visitante o usuario | listar y filtrar recetas por estado o dificultad | encontrar platos acordes a mis necesidades | Alta |
+| HU-05 | autor de una receta | editar los datos de mi propia receta | corregir ingredientes o descripción sin afectar terceros | Alta |
+| HU-06 | autor o administrador | eliminar una receta | retirar contenido propio o moderar la plataforma | Media |
+| HU-07 | chef o nutricionista | aprobar una receta pendiente de revisión | publicarla como confiable con registro de auditoría | Alta |
 
-### 3. Alcance del Producto Mínimo Viable (MVP)
+### Criterios de aceptación
 
-**3.1. Funcionalidades incluidas (En alcance)**
+**HU-01 — Registro de usuario**
+- Dado un payload válido con email no registrado y contraseña de al menos 8 caracteres, cuando se envía `POST /api/v1/auth/register`, entonces la contraseña se almacena hasheada con Bcrypt, se crea el usuario con rol por defecto `USER` y se retorna HTTP `201 Created`.
+- Dado un email ya existente en la base de datos, cuando se envía `POST /api/v1/auth/register`, entonces el sistema retorna HTTP `409 Conflict`.
 
-* **Núcleo de negocio:** CRUD completo de recetas con filtrado por parámetros (ej. `?difficulty=EASY`). Gestión de estados de publicación (`DRAFT`, `PENDING_REVIEW`, `APPROVED`).
-* **Seguridad:** Registro y autenticación mediante Bcrypt y JWT. Middleware de autorización basado en Roles (RBAC: `USER`, `CHEF`, `NUTRITIONIST`, `ADMIN`).
-* **Arquitectura de Datos:** Base de datos relacional PostgreSQL gestionada mediante Prisma ORM, implementando arrays nativos y JSONB para metadatos nutricionales e ingredientes.
-* **Observabilidad:** Middlewares de logging de peticiones HTTP en consola y tabla de auditoría (`audit_logs`) para cambios de estado.
+**HU-02 — Inicio de sesión**
+- Dado un email y contraseña válidos, cuando se envía `POST /api/v1/auth/login`, entonces se retorna HTTP `200 OK` con un token JWT firmado (`{ id, role }`).
+- Dada una contraseña incorrecta o email inexistente, cuando se envía `POST /api/v1/auth/login`, entonces se retorna HTTP `401 Unauthorized` sin revelar cuál campo falló.
 
-**3.2. Fuera de alcance (Exclusiones)**
+**HU-03 — Creación de receta**
+- Dado un usuario autenticado con JWT válido y payload validado por Zod (`prepTimeMinutes > 0`, al menos un ingrediente), cuando envía `POST /api/v1/recipes`, entonces la receta se persiste en estado `DRAFT` con `authorId` igual al ID del token y retorna HTTP `201 Created`.
 
-* Funcionalidades sociales secundarias: Likes, comentarios, seguidores y perfiles de usuario extendidos (reservado para Fase 2).
-* Subida física de archivos multimedia a buckets (AWS S3) y validación documental automatizada (KYC) de matrículas profesionales.
-* Generador automático de planes alimenticios semanales y listas del supermercado.
+**HU-04 — Listado y filtrado de recetas**
+- Dado un cliente HTTP consultando `GET /api/v1/recipes?status=APPROVED&difficulty=EASY`, cuando los parámetros cumplen el esquema Zod, entonces se devuelve HTTP `200 OK` con el listado coincidente en formato JSend.
+- Dado un parámetro inválido en `GET /api/v1/recipes/:id` (UUID mal formado), cuando Zod valida `req.params`, entonces responde HTTP `400 Bad Request`.
 
-### 4. Historias de usuario y prioridades
+**HU-05 — Edición de receta propia**
+- Dado un usuario autenticado que no es el `authorId` de la receta, cuando envía `PUT /api/v1/recipes/:id`, entonces el sistema rechaza la operación con HTTP `403 Forbidden`.
 
-**4.1. Sistema de priorización**
+**HU-06 — Eliminación de receta**
+- Dado un usuario que es el `authorId` o posee rol `ADMIN`, cuando envía `DELETE /api/v1/recipes/:id` sobre un ID existente, entonces retorna HTTP `200 OK`; si el ID no existe, retorna HTTP `404 Not Found`.
 
-* **P0 (Crítico):** Bloquea el flujo principal y los requisitos de aprobación del MVP.
-* **P1 (Alto):** Flujo secundario de alto valor (roles y auditoría).
-* **P2 (Medio):** Mejora la eficiencia (filtros avanzados).
-* **P3 (Bajo):** Pulido y casos de borde.
+**HU-07 — Aprobación profesional**
+- Dado un usuario con rol `USER` intentando ejecutar `PUT /api/v1/recipes/:id/approve`, entonces el middleware RBAC responde HTTP `403 Forbidden`.
+- Dado un usuario `CHEF` o `NUTRITIONIST` distinto del autor de la receta, cuando aprueba una receta revisable, entonces en una transacción atómica cambia el estado a `APPROVED`, registra `reviewedById` y `publishedAt`, e inserta el evento en `audit_logs`.
 
-**4.2. Catálogo de historias**
+## 7. Requisitos no funcionales
+| ID | Categoría | Requisito |
+|---|---|---|
+| RNF-01 | Rendimiento | El 95 % (P95) de las consultas de lectura (`GET /api/v1/recipes`) responden en menos de 150 ms. |
+| RNF-02 | Seguridad | Contraseñas con hash Bcrypt (`saltRounds >= 10`), autenticación stateless JWT Bearer, control RBAC estricto y secretos fuera del repositorio (`.env`). |
+| RNF-03 | Fiabilidad | Mutaciones compuestas ejecutadas en `prisma.$transaction` ACID; el 100 % de los controladores usa `try/catch` devolviendo formato JSend sin filtrar stack traces. |
+| RNF-04 | Mantenibilidad | Arquitectura monolítica modular en 4 capas (`Router -> Controller -> Service -> Repository`), TypeScript estricto sin `any` y validación Zod previa al controlador. |
 
-**AUTH-001: [Registro de Usuario Seguro] (P0)**
-Como usuario no autenticado,
-Quiero registrarme en la plataforma con mi email y contraseña,
-Para poder crear y gestionar mis propias recetas.
-*Criterios de Aceptación (Gherkin):*
+## 8. Métricas de éxito
+- 100 % de los endpoints del MVP cubiertos por pruebas de integración y colección exportada de Thunder Client (casos `200`, `201`, `400`, `401`, `403`, `404`, `409`).
+- 100 % de las aprobaciones de recetas registradas en `audit_logs`.
+- 0 errores de compilación TypeScript (`npm run build`) y 0 llamadas directas a Prisma desde la capa de servicios.
 
-* **Scenario:** Registro exitoso con datos válidos
-* **Given** un payload válido con email no registrado y contraseña fuerte
-* **When** el sistema procesa la solicitud POST en `/api/auth/register`
-* **Then** se crea el usuario, se hashea la contraseña y se retorna un HTTP 201.
-
-**REC-001: [Creación de Receta Base] (P0)**
-Como usuario autenticado,
-Quiero publicar una nueva receta con sus ingredientes y tiempos,
-Para compartirla con la comunidad.
-*Criterios de Aceptación (Gherkin):*
-
-* **Scenario:** Creación de receta asignada al autor
-* **Given** un token JWT válido en el header
-* **When** el usuario envía un POST a `/api/recipes` con el esquema de datos correcto
-* **Then** se inserta la receta en estado `DRAFT` vinculada a su `authorId`.
-
-**REV-001: [Aprobación Profesional de Receta] (P1)**
-Como Nutricionista o Chef autenticado,
-Quiero cambiar el estado de una receta pendiente a "Aprobada",
-Para validar su contenido frente a los usuarios finales.
-*Criterios de Aceptación (Gherkin):*
-
-* **Scenario:** Validación de permisos en cambio de estado
-* **Given** un usuario con rol `USER` que intenta actualizar el `status`
-* **When** ejecuta un PUT a `/api/recipes/:id/approve`
-* **Then** el middleware intercepta la petición y devuelve un HTTP 403 Forbidden.
-
-### 5. Requisitos técnicos y No Funcionales
-
-**5.1. Arquitectura y Escalabilidad**
-
-* **Arquitectura limpia:** Organización estructurada por componentes (Features: Auth, Users, Recipes). Capas lógicas divididas estrictamente en Rutas, Controladores (manejo HTTP), Servicios (Reglas de negocio puro) y Repositorios (Aislamiento de Prisma ORM).
-* **Validaciones:** Esquemas estrictos de entrada y salida utilizando la librería Zod acoplada a middlewares de Express.
-* **Base de Datos:** PostgreSQL para garantizar relaciones robustas (ACID), con transacciones atómicas para operaciones que involucren auditoría simultánea.
-
-**5.2. Seguridad y Cumplimiento**
-
-* **Estándares:** JWT sin carga útil sensible (solo IDs y roles), contraseñas ofuscadas con Bcrypt y gestión estricta de secretos mediante variables de entorno (`.env` excluido del control de versiones).
-* **Auditoría:** Registro de código con marcas de tiempo automáticas (`updatedAt` a nivel base de datos) y trazabilidad completa mediante el modelo `AuditLog`.
-
-**5.3. Accesibilidad e Internacionalización**
-
-* **Accesibilidad (Backend):** Estructuración del campo `nutritionalInfo` en JSON estructurado para facilitar su posterior consumo por lectores de pantalla y generadores semánticos en el frontend. Mensajes de error HTTP claros y descriptivos.
-
-### 6. Plan de proyecto y hitos críticos
-
-| Hito | Entregable | Fecha Estimada |
-| --- | --- | --- |
-| **M1: Especificación y Base** | Diseño de base de datos Prisma y configuración del proyecto Node/Express. | Fin Día 3 |
-| **M2: Desarrollo Core** | Conexión DB, CRUD de Entidad y Punto de Control 1. | Fin Semana 1 |
-| **M3: Seguridad y Reglas** | Autenticación JWT, Middlewares de validación Zod, Filtros y RBAC. | Mediados Semana 2 |
-| **M4: Lanzamiento y Entrega** | Pruebas completas en Thunder Client (Casos de éxito y error), README documentado y código pusheado. | Fin Semana 2 |
-
-### 7. Análisis de riesgos y mitigación
-
-* **Técnicos:** Riesgo de *Scope Creep* (intentar abarcar la funcionalidad de red social en la primera fase) que impida llegar a la fecha de entrega del TP.
-* *Mitigación:* Congelar estrictamente el esquema de datos según el alcance de este documento. Cualquier funcionalidad social (likes, seguimientos) se enviará directamente al backlog de la Fase 2.
-
-
-* **Operativos:** Complejidad en la manipulación de arrays y JSONB en PostgreSQL a través de Prisma.
-* *Mitigación:* Restringir las operaciones de filtrado iniciales a campos planos indexados (dificultad, categoría) y dejar el parseo avanzado del JSONB de ingredientes para el lado del cliente (Frontend) o futuras iteraciones.
-
-**Responsable del modelo:** Facundo Nicolás González
-**Fecha de revisión:** 06/11/2026
-**Documentos de referencia:** Trabajo práctico integrador
+## 9. Supuestos, riesgos y preguntas abiertas
+- **Riesgo de alcance (Scope Creep):** incorporar funcionalidades sociales antes de cerrar el MVP. *Mitigación:* congelar el alcance v1 a `User`, `Recipe`, `Session` y `AuditLog`.
+- **Complejidad de filtros en JSONB:** las búsquedas iniciales se limitan a columnas indexadas (`status`, `difficulty`); el análisis avanzado de `ingredients` y `nutritionalInfo` queda para fases posteriores.
+- **Pregunta abierta:** ¿Los profesionales (`CHEF`, `NUTRITIONIST`) requieren verificación previa por parte de `ADMIN` en v1 o se habilita el alta en `/auth/register` para pruebas académicas?

@@ -1,90 +1,40 @@
-# Guía de Contribución - Recetaria API
+# Cómo contribuir
 
-¡Gracias por tu interés en contribuir a Recetaria! Este documento establece las reglas para colaborar en el código, mantener la calidad y asegurar que la arquitectura escale correctamente.
+¡Gracias por colaborar con Recetaria! Esta guía resume el entorno local, el flujo de trabajo y los estándares del repositorio.
 
-## 1. Interacción con Agentes de IA
+## Entorno de desarrollo
+Requisitos: Node.js 22+, Docker Desktop (Compose v2) y Git.
 
-Si usás copilotos o agentes (como Claude, GPT o Cursor) para proponer cambios, tené en cuenta lo siguiente:
-- **Contexto Híbrido:** El repositorio cuenta con un archivo `AGENTS.md` (o `llms-full.txt`) que define la misión y límites del agente. Por favor, asegúrate de que tu agente lo lea antes de generar código.
-- **Sistema de Límites "Always, Ask, Never":**
-  - **Always (Siempre):** Podés automatizar linting, formateo de Markdown, generación de docstrings y bloques `try/catch` globales.
-  - **Ask (Preguntar):** Debés pedir validación humana para cambios en esquemas de base de datos (`schema.prisma`) o nuevas dependencias externas en el `package.json`.
-  - **Never (Nunca):** Está prohibido subir claves API, modificar el archivo `.env`, eliminar tests de integración existentes o modificar archivos en `node_modules`.
+1. Copiar `.env.example` a `.env` y completar los valores locales (nunca versionar `.env`).
+2. Levantar la base de datos: `npm run docker:db`
+3. Instalar dependencias y arrancar el servidor: `npm install && npm run dev`
 
-## 2. Cómo Contribuir
+## Flujo de trabajo (GitHub Flow)
+1. Crear una rama desde `main`: `feat/recipe-filters`, `fix/jwt-expiration`, `docs/update-sad`.
+2. Usar **Conventional Commits**:
+   - `feat(recipes): agrega filtro por dificultad`
+   - `fix(auth): corrige expiración del token JWT`
+   - `docs:`, `refactor:`, `test:`, `chore:`
+3. Abrir un Pull Request hacia `main` completando el template en `.github/pull_request_template.md`.
+4. Verificar compilación (`npm run build`), tests (`npm test`) y configuración Docker (`npm run docker:config`) antes de mergear.
 
-### 🐛 Reportar Bugs
-Si encontrás un error, abrí un Issue en GitHub con la etiqueta `bug` incluyendo:
-1. **Título claro:** Descripción concisa del error.
-2. **Pasos para reproducir:** Lista numerada del 1 al N.
-3. **Comportamiento:** Qué esperabas vs. qué pasó realmente.
-4. **Entorno:** Versión de Node.js, SO, y si usaste Docker para PostgreSQL.
+## Estándares de código
+- **TypeScript estricto:** prohibido el uso de `any`; inferir DTOs con `z.infer<typeof schema>`.
+- **Arquitectura en 4 capas:** `Router -> Controller -> Service -> Repository`. Solo `Repository` interactúa con Prisma Client.
+- **Controladores:** manejan exclusivamente `req`/`res`, envuelven llamadas en `try/catch` y devuelven el sobre JSend (`{ success, statusCode, message, data/errors }`).
+- **Nomenclatura:** `kebab-case.ts` para archivos (`recipe.service.ts`), `PascalCase` para clases e interfaces, `camelCase` para funciones y variables.
 
-### 💡 Sugerir Funcionalidades
-Para nuevas ideas, abrí un Issue con la etiqueta `enhancement`. Explicá el valor de negocio y a quién beneficia la propuesta (ej. Usuarios Finales, Nutricionistas, Chefs).
+## Configuración de Antigravity CLI
+El proyecto está optimizado para trabajar con Antigravity CLI (`agy`):
+1. Copiá las reglas recomendadas de [`docs/antigravity-settings.example.json`](docs/antigravity-settings.example.json) en tu archivo personal `~/.gemini/antigravity-cli/settings.json` para activar el sandbox de terminal y proteger `.env`.
+2. Usá `/plan` antes de modificar lógica de negocio o modelos de datos y ejecutá los planes de `docs/plans/` de a una fase por vez.
+3. Los hooks de seguridad en `.agents/hooks.json` se aplican automáticamente a todo el equipo para bloquear acceso a `.env`, `secrets/` y comandos destructivos.
 
-## 3. Flujo de Trabajo (Git Workflow)
+## Tests
+- `npm test` ejecuta las pruebas unitarias y de integración.
+- Todo PR con lógica nueva debe incluir pruebas unitarias (mockeando solo el `Repository`) o de integración (Supertest), y actualizar la colección de Thunder Client cuando corresponda.
 
-Seguimos una convención estricta para mantener un historial limpio y automatizable:
+## Documentación
+Si el cambio modifica una regla de negocio, un rol, el modelo de datos o la arquitectura, actualizá el documento correspondiente en `docs/` y agregá una entrada en la sección `Sin publicar` de `CHANGELOG.md` dentro del mismo PR.
 
-1. **Fork & Clone:** Hacé un fork y trabajá en tu copia local.
-2. **Branching:** Creá una rama descriptiva usando `tipo/nro-issue-descripcion-corta`:
-  - `feat/12-recipe-filters`
-  - `fix/34-jwt-expiration`
-3. **Commits:** Usamos Conventional Commits:
-  - `feat(recipes): agregar filtro por dificultad` (Nueva funcionalidad)
-  - `fix(auth): corregir hash de bcrypt` (Corrección de bug)
-  - `docs: actualizar readme con nuevos endpoints` (Documentación)
-
-```mermaid
-flowchart TD
-A[Identificar Issue] --> B{¿Existe?}
-B -- No --> C[Abrir Issue]
-B -- Sí --> D[Fork y Branch]
-D --> E[Implementar con Tests]
-E --> F[Conventional Commit]
-F --> G[Abrir Pull Request]
-G --> H{Revisión}
-H -- Cambios --> E
-H -- Aprobado --> I[Merge]
-```
-
-## 4. Estándares Técnicos
-
-Para que tu código sea aceptado en el TP/Proyecto, debe cumplir con estos pilares:
-
-- **TypeScript Estricto:** Prohibido el uso de `any`. Todo input externo (`req.body`, `req.query`, `req.params`) debe validarse con **Zod** antes de tocar la lógica de negocio.
-- **Clean Code:** Código modular y funcional. Comentá el "por qué" (regla de negocio), no el "qué" (el código debe ser autoexplicativo).
-- **Separación de Capas:** Respetamos la jerarquía `Router -> Controller -> Service -> Repository`.
-  - El *Controller* solo maneja HTTP (req, res) y try/catch.
-  - El *Service* tiene la lógica de negocio pura.
-  - El *Repository* aísla a Prisma y PostgreSQL.
-- **Nomenclatura:**
-  - Archivos generales: `kebab-case.ts` (ej. `recipes.controller.ts`).
-  - Clases / Modelos: `PascalCase` (ej. `RecipeService`).
-
-## 5. Testing y Validación
-
-No aprobamos Pull Requests que rompan los flujos críticos o no manejen los códigos de error HTTP adecuadamente.
-- **Backend:** Tests de integración (simulando peticiones HTTP) usando Supertest y Jest/Vitest.
-- **Validación Manual:** Las rutas deben estar documentadas y ser funcionales en la colección de **Thunder Client**.
-- **Pre-commit:** Se recomienda usar Husky para ejecutar linting antes de cada commit.
-
-## 6. Checklist de Pull Request
-
-Antes de enviar tu PR, verificá que cumplas con lo siguiente:
-
-- [ ] He leído y seguido las guías de este documento.
-- [ ] Mi código sigue los estándares de nomenclatura y la arquitectura en capas.
-- [ ] He encapsulado la lógica de Prisma en el repositorio correspondiente.
-- [ ] Todos los tests de integración y la colección de Thunder Client pasan localmente.
-- [ ] He actualizado la documentación si modifiqué endpoints o esquemas.
-- [ ] El PR es pequeño y trata una sola funcionalidad/arreglo.
-
-## Código de Conducta
-
-Nos comprometemos a fomentar un entorno colaborativo y académico libre de acoso. La empatía es tan importante como el código limpio. 
-
-¿Tenés dudas? Escribile al Responsable Técnico: **Facundo Nicolás González** o abrí una discusión en GitHub.
-
-¡Gracias por ayudar a construir el futuro de este proyecto! 🚀
+Respetá nuestro [Código de Conducta](CODE_OF_CONDUCT.md). ¿Dudas? Contactá al Responsable Técnico (**Facundo Nicolás González**) o abrí un Issue.

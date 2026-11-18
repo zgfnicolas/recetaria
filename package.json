@@ -16,16 +16,15 @@
     "docker:debug": "docker compose --profile debug up -d",
     "docker:prod": "docker compose -f compose.yaml up --build -d",
     "docker:down": "docker compose down",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "prisma skills sync || exit 0"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zgfnicolas/recetaria.git"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Facundo Nicolás González",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/zgfnicolas/recetaria/issues"
