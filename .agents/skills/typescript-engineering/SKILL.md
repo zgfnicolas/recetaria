@@ -51,6 +51,7 @@ Antes de escribir o refactorizar, revisar [tsconfig.json](../../../tsconfig.json
 | Necesidad | Skill |
 |---|---|
 | Capas (`src/modules/`), composition root, `.dependency-cruiser.cjs` y JSend | [layered-architecture-ts](../layered-architecture-ts/SKILL.md) |
+| Cuánta abstracción construir, puertas 1/2 vías, triage de edge cases y tripwires | [pragmatic-engineering-complexity-control](../pragmatic-engineering-complexity-control/SKILL.md) |
 | Runtime Node.js (event loop, libuv, streams, `AsyncLocalStorage`, `SIGTERM`) | [node-backend-engineering](../node-backend-engineering/SKILL.md) |
 | Middlewares Express 5, `req.valid` y `errorHandlerMiddleware` | [express-backend-engineering](../express-backend-engineering/SKILL.md) |
 | Semántica HTTP, BOPLA, paginación y resiliencia de API | [api-engineering-ts](../api-engineering-ts/SKILL.md) |

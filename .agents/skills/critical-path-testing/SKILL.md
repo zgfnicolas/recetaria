@@ -61,6 +61,7 @@ Antes de escribir tests: auditar arquitectura, runner y CI existentes (no migrar
 | `EXPLAIN (ANALYZE, BUFFERS)` y tests de concurrencia/locks en PostgreSQL | [postgresql-engineering](../postgresql-engineering/SKILL.md) |
 | Primera línea estática (TS 7 strict, `erasableSyntaxOnly`, ESLint/SonarJS) | [typescript-engineering](../typescript-engineering/SKILL.md) |
 | Frontera de testing por capa (`L0`/`L1`/`L2`) | [layered-architecture-ts](../layered-architecture-ts/SKILL.md) |
+| Triage de edge cases, evitar sobreingeniería y tripwires con vencimiento | [pragmatic-engineering-complexity-control](../pragmatic-engineering-complexity-control/SKILL.md) |
 | Rulesets de `main`, required status checks y política de PR (`pr-policy.yml`) | [github-repository-governance](../github-repository-governance/SKILL.md) · [git-workflow-engineering](../git-workflow-engineering/SKILL.md) |
 
 Para inventario P0 completo de Recetaria, `vitest.config.ts` endurecido, tests Unit/Integración/Concurrencia, `stryker.config.json`, `k6`, OWASP, reglas `AI-01`–`AI-11`, KPIs y **Definition of Done**, consultá [references/testing-patterns.md](./references/testing-patterns.md).

@@ -17,7 +17,7 @@ description: >-
 
 **Prioridades:** Seguridad → Correctitud → Disponibilidad → Observabilidad → Mantenibilidad → Rendimiento.
 
-*(Delegaciones: capas y composition root → `layered-architecture-ts`; tipado estricto TS 7, `Result`/`AppError`, Big-O y complejidad → [typescript-engineering](../typescript-engineering/SKILL.md); estrategia QA basada en riesgo P0, sensibilidad y Vitest/Supertest → [critical-path-testing](../critical-path-testing/SKILL.md); semántica HTTP, BOPLA, cursor, ETag e Idempotency-Key → `api-engineering-ts`; JWT, Bcrypt, RBAC, ownership y CSRF → `identity-sessions-authorization`; runtime Node, event loop, async/await, Piscina y ALS → `node-backend-engineering`; `env.ts`, npm/pnpm y graceful shutdown → `js-project-configuration`; alta paso a paso de rutas → `nuevo-endpoint`.)*
+*(Delegaciones: cuánta complejidad construir y triage de edge cases → [pragmatic-engineering-complexity-control](../pragmatic-engineering-complexity-control/SKILL.md); capas y composition root → `layered-architecture-ts`; tipado estricto TS 7, `Result`/`AppError`, Big-O y complejidad → [typescript-engineering](../typescript-engineering/SKILL.md); estrategia QA basada en riesgo P0, sensibilidad y Vitest/Supertest → [critical-path-testing](../critical-path-testing/SKILL.md); semántica HTTP, BOPLA, cursor, ETag e Idempotency-Key → `api-engineering-ts`; JWT, Bcrypt, RBAC, ownership y CSRF → `identity-sessions-authorization`; runtime Node, event loop, async/await, Piscina y ALS → `node-backend-engineering`; `env.ts`, npm/pnpm y graceful shutdown → `js-project-configuration`; alta paso a paso de rutas → `nuevo-endpoint`.)*
 
 ## 1. Reglas duras de Express 5 en Recetaria (MUST)
 
