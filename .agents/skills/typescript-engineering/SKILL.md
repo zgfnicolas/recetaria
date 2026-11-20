@@ -12,11 +12,11 @@ description: >-
 
 # Ingeniería TypeScript (Recetaria API)
 
-Baseline: **TypeScript 7** (`"typescript": "^7.0.2"` en [package.json](../../../package.json)), **Node.js 22+ LTS** (con ruta a ESM + *type stripping* en Node 24/26), **Zod 4** y las convenciones de [code-style.md](../../rules/code-style.md).
+Baseline: **TypeScript 7** (`"typescript": "^7.0.2"` en [package.json](../../../package.json)), **Node.js 24 LTS** con **ESM nativo** (`"type": "module"`, `module: "nodenext"`, `tsx` según [ADR-0006](../../../docs/adr/0006-estandarizacion-esm-prisma7-y-contratos-api.md)), **Zod 4** y las convenciones de [code-style.md](../../rules/code-style.md).
 Prioridades: **Correctitud → Seguridad → Legibilidad → Simplicidad → Mantenibilidad → Rendimiento medido → Concisión**. *(Conciso = menos conceptos y ramas, no menos caracteres.)*
 
 > [!NOTE]
-> El [tsconfig.json](../../../tsconfig.json) actual activa `strict` y `noUncheckedIndexedAccess` sobre `module: "commonjs"` y `target: "es2022"`. Escribir código compatible con `erasableSyntaxOnly` desde hoy evita deuda al migrar a ESM/Node type stripping y endurecer flags de TS 7 (ver hoja de ruta en `references/ts-patterns.md`).
+> Todo código nuevo en `src/` debe compilar con `module: "nodenext"` (extensiones `.js` en imports relativos), `verbatimModuleSyntax` y `erasableSyntaxOnly` (sin `enum`, `namespace` con runtime ni *parameter properties*).
 
 ## 0. Modo de trabajo y reglas duras (MUST)
 

@@ -87,9 +87,9 @@ Entidad principal con el contenido, metadatos nutricionales y estado de validaci
 | `difficulty` | `Difficulty` | No | Complejidad, por defecto `'MEDIUM'` |
 | `status` | `RecipeStatus` | No | Estado de validación (`DRAFT` o `APPROVED`), por defecto `'DRAFT'` |
 | `prepTimeMinutes` | `SMALLINT` | No | Tiempo en minutos (`CHECK ("prepTimeMinutes" > 0 AND "prepTimeMinutes" <= 1440)`) |
-| `tags` | `VARCHAR(50)[]` | No | Etiquetas dietarias, por defecto `'{}'` |
+| `tags` | `VARCHAR(50)[]` | No | Etiquetas dietarias (máx. 20 ítems de ≤ 50 caracteres en Zod), por defecto `'{}'` |
 | `ingredients` | `JSONB` | No | Lista estructurada de ingredientes (`name`, `quantity`, `unit`) |
-| `nutritionalInfo` | `JSONB` | Sí | Información nutricional opcional |
+| `nutritionalInfo` | `JSONB` | Sí | Objeto nutricional opcional tipado (`calories`, `proteinGrams`, `carbsGrams`, `fatGrams`, `fiberGrams`, `servings`) |
 | `coverImageUrl` | `VARCHAR(512)` | Sí | URL de portada |
 | `videoUrl` | `VARCHAR(512)` | Sí | URL de video corto |
 | `authorId` | `UUID (FK)` | No | Autor que creó la receta (`-> users.id`) |
@@ -104,7 +104,7 @@ Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO
 | Campo | Tipo | Nulo | Descripción |
 |---|---|:-:|---|
 | `id` | `UUID` | No | Identificador del evento (`PK`) |
-| `entityName` | `VARCHAR(50)` | No | Nombre de la entidad afectada (ej. `'Recipe'`) |
+| `entityName` | `VARCHAR(50)` | No | Nombre canónico de la entidad afectada (`'Recipe'`) |
 | `entityId` | `UUID` | No | ID del registro alterado (sin FK hacia `recipes` para conservar trazabilidad tras `DELETE`) |
 | `action` | `VARCHAR(50)` | No | Acción ejecutada (`'APPROVE'`, `'RESET_TO_DRAFT'`, `'DELETE'`) |
 | `userId` | `UUID (FK)` | Sí | Usuario que ejecutó la acción (`-> users.id`) |
@@ -113,7 +113,7 @@ Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO
 | `createdAt` | `TIMESTAMPTZ` | No | Marca temporal del evento (`NOW()`) |
 
 ### Índices, triggers y datos semilla
-- **Índices B-Tree:** `idx_users_email`, `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_recipes_slug`, `idx_audit_logs_entity`, `idx_audit_logs_createdat`.
+- **Índices B-Tree:** `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_audit_logs_entity`, `idx_audit_logs_createdat` (más los índices únicos implícitos de `UNIQUE(email)` y `UNIQUE(slug)`; los índices redundantes `idx_users_email` e `idx_recipes_slug` y `ON UPDATE CASCADE` se retiran en el saneamiento SQL de Fase 2 según `ADR-0006`).
 - **Triggers:** `trg_users_updated_at` y `trg_recipes_updated_at` ejecutan `update_updated_at_column()` en `BEFORE UPDATE` para actualizar `"updatedAt" = NOW()`.
 - **Seed inicial:** `database_schema_init.sql` inserta con `ON CONFLICT (email) DO NOTHING` 4 usuarios iniciales (`user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com`, `admin@recetaria.com`) para facilitar pruebas de roles.
 

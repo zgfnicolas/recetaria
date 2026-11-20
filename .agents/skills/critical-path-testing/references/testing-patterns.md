@@ -145,17 +145,18 @@ import { app, prisma, truncateAll, createUserAndToken, createDraftRecipe } from 
 
 beforeEach(() => truncateAll(prisma));
 
-describe("POST /api/v1/recipes/:id/approve [P0 REC-04]", () => {
+describe("PUT /api/v1/recipes/:id/approve [P0 REC-04]", () => {
   it("bloquea auto-aprobación de un CHEF (403) y no altera estado ni audit_logs [RN-05]", async () => {
     const chef = await createUserAndToken("CHEF");
     const recipe = await createDraftRecipe(chef.user.id);
 
     const res = await request(app)
-      .post(`/api/v1/recipes/${recipe.id}/approve`)
+      .put(`/api/v1/recipes/${recipe.id}/approve`)
       .set("Authorization", `Bearer ${chef.token}`);
 
     expect(res.status).toBe(403);
-    expect(res.body.status).toBe("fail");
+    expect(res.body.success).toBe(false);
+    expect(res.body.statusCode).toBe(403);
 
     const persisted = await prisma.recipe.findUniqueOrThrow({ where: { id: recipe.id } });
     const logs = await prisma.auditLog.count({ where: { entityId: recipe.id } });
@@ -170,12 +171,12 @@ describe("POST /api/v1/recipes/:id/approve [P0 REC-04]", () => {
     const recipe = await createDraftRecipe(author.user.id);
 
     const [resA, resB] = await Promise.all([
-      request(app).post(`/api/v1/recipes/${recipe.id}/approve`).set("Authorization", `Bearer ${chefA.token}`),
-      request(app).post(`/api/v1/recipes/${recipe.id}/approve`).set("Authorization", `Bearer ${chefB.token}`),
+      request(app).put(`/api/v1/recipes/${recipe.id}/approve`).set("Authorization", `Bearer ${chefA.token}`),
+      request(app).put(`/api/v1/recipes/${recipe.id}/approve`).set("Authorization", `Bearer ${chefB.token}`),
     ]);
 
     expect([resA.status, resB.status].sort()).toEqual([200, 409]);
-    expect(await prisma.auditLog.count({ where: { entityId: recipe.id, action: "APPROVE" } })).toBe(1);
+    expect(await prisma.auditLog.count({ where: { entityName: "Recipe", entityId: recipe.id, action: "APPROVE" } })).toBe(1);
   });
 });
 ```

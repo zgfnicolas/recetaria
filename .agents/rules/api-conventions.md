@@ -7,9 +7,9 @@ description: "Convenciones para endpoints REST, formato JSend, códigos HTTP y v
 # Convenciones de API y Contratos HTTP
 
 ## 1. Versionado y Rutas
-- Exponer todos los endpoints bajo el prefijo `/api/v1/` con nombres en plural y minúsculas (`/api/v1/auth`, `/api/v1/recipes`).
-- Validar parámetros `:id` como UUIDv4 mediante Zod antes de llegar al controlador.
-- Orden de middlewares en rutas protegidas: `validateMiddleware` -> `authMiddleware` -> `rbacMiddleware([roles])`.
+- Exponer todos los endpoints bajo el prefijo `/api/v1/` con nombres en plural y minúsculas (`/api/v1/auth`, `/api/v1/recipes`), más `GET /health` (liveness sin DB) y `GET /health/ready` (readiness con `SELECT 1`).
+- Validar parámetros `:id` como UUIDv4 (`z.uuid()`) y payloads con `z.strictObject(...)` (Zod 4, prevención BOPLA) antes de llegar al controlador.
+- Orden de middlewares en rutas protegidas: **`authMiddleware` -> `rbacMiddleware([roles])` -> `validateMiddleware`** (rechaza `401`/`403` antes de parsear payloads; en rutas públicas corre solo `validateMiddleware`).
 - Verificar los permisos por rol y reglas de propiedad según `docs/roles.md`.
 
 ## 2. Contrato de Respuesta JSend

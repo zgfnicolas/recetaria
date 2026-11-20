@@ -1,5 +1,5 @@
 # PRD — Recetaria API
-Versión 1.2 · Última actualización: 2026-11-18 · Responsable: Facundo Nicolás González
+Versión 1.3 · Última actualización: 2026-11-20 · Responsable: Facundo Nicolás González
 
 ## 1. Visión
 Centralizar un catálogo confiable de recetas gastronómicas donde el contenido generado por la comunidad es validado clínica y culinariamente por nutricionistas y chefs profesionales.
@@ -18,14 +18,14 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 
 ## 5. Alcance
 ### Incluido en la versión 1 (MVP)
-- **Base arquitectónica:** Node.js 22, Express 5, TypeScript estricto y PostgreSQL 15 + Prisma ORM organizados por componentes (`auth`, `recipes`) en 4 capas (`Router -> Controller -> Service -> Repository`).
+- **Base arquitectónica:** Node.js 24 LTS, ESM nativo (`nodenext`), Express 5, TypeScript 7 estricto (`tsx` en desarrollo) y PostgreSQL 15 + Prisma 7 GA (`@prisma/adapter-pg`) organizados por componentes (`auth`, `recipes`) en 4 capas (`Router -> Controller -> Service -> Repository`), con `src/app.ts` separado de `src/server.ts`.
 - **Modelos activos (3):** `User`, `Recipe` y `AuditLog` (autenticación 100 % stateless sin tabla `sessions`).
-- **Seguridad e identidad:** registro (`POST /api/v1/auth/register` con `role` opcional para pruebas) y login (`POST /api/v1/auth/login`) con Bcrypt (`>= 10` rounds) y Bearer JWT (`{ id, role }`), más usuarios semilla (*seed*) para los 4 roles.
-- **CRUD de recetas:** alta (`POST /api/v1/recipes`), lectura pública (`GET /api/v1/recipes`, `GET /api/v1/recipes/:id`), edición parcial o completa por el autor (`PUT /api/v1/recipes/:id`) y borrado físico por el autor o `ADMIN` (`DELETE /api/v1/recipes/:id`).
-- **Validaciones:** Zod en middleware para formato/tipos de entrada y validaciones explícitas de negocio en `RecipeService` (`prepTimeMinutes` entre `1` y `1440`, ingredientes con `quantity > 0`, ownership, bloqueo de auto-aprobación y detección de receta ya aprobada).
-- **Aprobación profesional:** transición `DRAFT -> APPROVED` en `PUT /api/v1/recipes/:id/approve` exclusiva de `CHEF`/`NUTRITIONIST` con registro en `audit_logs` dentro de `prisma.$transaction`.
-- **Extras del TP integrados:** filtros con `req.query` (`?status=`, `?difficulty=`, `?authorId=`), control de roles RBAC, relación `User`–`Recipe` (`authorId`, `reviewedById`) y middleware de logging HTTP en consola (`loggerMiddleware`).
-- **Operación y entrega:** endpoint `GET /health` para Docker healthcheck, respuestas en formato JSend (`200`, `201`, `400`, `401`, `403`, `404`, `409`, `500`) y colección exportada en `docs/thunder-client-collection.json`.
+- **Seguridad e identidad:** registro (`POST /api/v1/auth/register` con `role` opcional para pruebas) y login (`POST /api/v1/auth/login`) con Bcrypt (`>= 10` rounds), rechazo `401` si `isActive === false` y Bearer JWT (`{ id, role }`), más usuarios semilla (*seed*) para los 4 roles.
+- **CRUD de recetas:** alta (`POST /api/v1/recipes`), lectura pública paginada (`GET /api/v1/recipes` con `?page=&limit=`, `GET /api/v1/recipes/:id`), consulta autenticada de recetas propias (`GET /api/v1/recipes/mine`), edición parcial o completa por el autor (`PUT /api/v1/recipes/:id`) y borrado físico por el autor o `ADMIN` (`DELETE /api/v1/recipes/:id`).
+- **Validaciones:** Zod 4 estricto (`z.strictObject`) en middleware para formato/tipos/prevención BOPLA (incluyendo `tags` acotado y `nutritionalInfo` tipado) y validaciones explícitas de negocio en `RecipeService` (`prepTimeMinutes` entre `1` y `1440`, ingredientes con `quantity > 0`, ownership, bloqueo de auto-aprobación y detección de receta ya aprobada).
+- **Aprobación profesional:** transición `DRAFT -> APPROVED` en `PUT /api/v1/recipes/:id/approve` exclusiva de `CHEF`/`NUTRITIONIST` con registro en `audit_logs` (`entityName = "Recipe"`) dentro de `prisma.$transaction`.
+- **Extras del TP integrados:** filtros con `req.query` (`?status=`, `?difficulty=`, `?authorId=`, `?page=`, `?limit=`), control de roles RBAC, relación `User`–`Recipe` (`authorId`, `reviewedById`) y middleware de logging HTTP en consola (`loggerMiddleware`).
+- **Operación y entrega:** endpoints `GET /health` (liveness liviano sin DB para Docker `HEALTHCHECK`) y `GET /health/ready` (readiness verificando PostgreSQL), respuestas en formato JSend extendido (`200`, `201`, `400`, `401`, `403`, `404`, `409`, `500`, `503`) y colección exportada en `docs/thunder-client-collection.json`.
 
 ### Fuera de alcance
 - Funcionalidades sociales secundarias (likes, comentarios, seguidores y perfiles extendidos).
@@ -52,19 +52,20 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 - Dado un email ya registrado, cuando se envía `POST /api/v1/auth/register`, entonces retorna HTTP `409 Conflict`.
 
 **HU-02 — Inicio de sesión**
-- Dado un email y contraseña válidos, cuando se envía `POST /api/v1/auth/login`, entonces retorna HTTP `200 OK` con un JWT firmado (`{ id, role }`).
-- Dada una contraseña incorrecta o email inexistente, cuando se envía `POST /api/v1/auth/login`, entonces retorna HTTP `401 Unauthorized` genérico.
+- Dado un email y contraseña válidos de un usuario con `isActive === true`, cuando se envía `POST /api/v1/auth/login`, entonces retorna HTTP `200 OK` con un JWT firmado (`{ id, role }`).
+- Dada una contraseña incorrecta, un email inexistente o un usuario inactivo (`isActive === false`), cuando se envía `POST /api/v1/auth/login`, entonces retorna HTTP `401 Unauthorized` genérico.
 
 **HU-03 — Creación de receta**
-- Dado un token JWT válido y un payload con `prepTimeMinutes` entre `1` y `1440` e ingredientes válidos (`quantity > 0`), cuando se envía `POST /api/v1/recipes`, entonces `RecipeService` genera el `slug` automáticamente desde `title`, guarda la receta en estado `DRAFT` asociada a `req.user.id` y retorna HTTP `201 Created`.
+- Dado un token JWT válido y un payload estricto (`z.strictObject`) con `prepTimeMinutes` entre `1` y `1440`, ingredientes válidos (`quantity > 0`), `tags` (≤ 20 ítems, ≤ 50 caracteres) y `nutritionalInfo` opcional tipado, cuando se envía `POST /api/v1/recipes`, entonces `RecipeService` genera el `slug` automáticamente (`<titulo-ascii>-<8-hex>`, ≤ 200 caracteres), guarda la receta en estado `DRAFT` asociada a `req.user.id` y retorna HTTP `201 Created`.
 
 **HU-04 — Listado, detalle y filtrado de recetas**
-- Dado un cliente HTTP sin o con token consultando `GET /api/v1/recipes`, cuando no envía filtros, entonces retorna HTTP `200 OK` con todas las recetas (`DRAFT` y `APPROVED`); si envía `?status=APPROVED&difficulty=EASY&authorId=<uuid>`, aplica los filtros combinados.
+- Dado un cliente HTTP sin o con token consultando `GET /api/v1/recipes`, cuando no envía filtros, entonces retorna HTTP `200 OK` con `data: { items, meta: { page, limit, total, totalPages } }` ordenado por `createdAt DESC, id DESC` (por defecto `page=1`, `limit=20`, máximo `100`) incluyendo `DRAFT` y `APPROVED`; si envía `?status=APPROVED&difficulty=EASY&authorId=<uuid>&page=1&limit=20`, aplica los filtros y paginación combinados.
+- Dado un usuario autenticado consultando `GET /api/v1/recipes/mine`, entonces retorna HTTP `200 OK` con el mismo formato paginado filtrando exclusivamente por `authorId === req.user.id` (sin token retorna `401 Unauthorized`).
 - Dado un parámetro `:id` sin formato UUIDv4 en `GET /api/v1/recipes/:id`, entonces Zod retorna `400 Bad Request`; si el UUID es válido pero no existe, retorna `404 Not Found`.
 
 **HU-05 — Edición de receta propia**
 - Dado un usuario autenticado distinto de `recipe.authorId`, cuando envía `PUT /api/v1/recipes/:id`, entonces el sistema retorna HTTP `403 Forbidden`.
-- Dado el autor original enviando al menos 1 campo válido en `PUT /api/v1/recipes/:id`, si la receta estaba `APPROVED`, entonces dentro de `prisma.$transaction` actualiza los campos, reinicia `status` a `DRAFT`, limpia `reviewedById` y `publishedAt`, e inserta `RESET_TO_DRAFT` en `audit_logs` (regenerando `slug` si cambió `title`). Si envía `{}` vacío, retorna `400 Bad Request`.
+- Dado el autor original enviando al menos 1 campo válido en `PUT /api/v1/recipes/:id`, si la receta estaba `APPROVED`, entonces dentro de `prisma.$transaction` actualiza los campos, reinicia `status` a `DRAFT`, limpia `reviewedById` y `publishedAt`, e inserta `RESET_TO_DRAFT` (`entityName = "Recipe"`) en `audit_logs` (regenerando `slug` si cambió `title`). Si la receta ya estaba `DRAFT`, actualiza normalmente sin escribir en `audit_logs`. Si envía `{}` vacío o campos no permitidos, retorna `400 Bad Request`.
 
 **HU-06 — Eliminación física de receta**
 - Dado el autor original (`authorId`) o un `ADMIN`, cuando envía `DELETE /api/v1/recipes/:id` sobre un ID existente, entonces dentro de `prisma.$transaction` inserta en `audit_logs` el evento `DELETE` con `oldValues` y elimina la fila de `recipes`, retornando `200 OK`. Un usuario no autorizado recibe `403 Forbidden` y un ID inexistente `404 Not Found`.

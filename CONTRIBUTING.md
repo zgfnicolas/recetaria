@@ -3,16 +3,16 @@
 ¡Gracias por colaborar con Recetaria! Esta guía resume el entorno local, el flujo de trabajo y los estándares del repositorio.
 
 ## Entorno de desarrollo
-Requisitos: Node.js 22+, Docker Desktop (Compose v2) y Git.
+Requisitos: Node.js 24 LTS, Docker Desktop (Compose v2) y Git.
 
 1. Copiar `.env.example` a `.env` y completar los valores locales (nunca versionar `.env`).
 2. Levantar la base de datos: `npm run docker:db`
 3. Instalar dependencias y arrancar el servidor: `npm install && npm run dev`
 
 ## Flujo de trabajo (GitHub Flow)
-1. Crear una rama desde `main`: `feat/recipe-filters`, `fix/jwt-expiration`, `docs/update-sad`.
-2. Usar **Conventional Commits**:
-   - `feat(recipes): agrega filtro por dificultad`
+1. Crear una rama desde `main` con prefijo en inglés y descripción en **español ASCII** (`kebab-case`, sin tildes ni `ñ`): `feat/filtro-recetas-por-dificultad`, `fix/expiracion-token-jwt`, `docs/actualizar-modelo-datos`.
+2. Usar **Conventional Commits** detallados con tipos/footers en inglés y descripción en español (presente indicativo uniforme, ≤ 72 caracteres sin punto final; sumar cuerpo con el *porqué* en cambios relevantes):
+   - `feat(recipes): agrega filtro por dificultad y paginación`
    - `fix(auth): corrige expiración del token JWT`
    - `docs:`, `refactor:`, `test:`, `chore:`
 3. Abrir un Pull Request hacia `main` completando el template en `.github/pull_request_template.md`.

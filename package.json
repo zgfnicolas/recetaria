@@ -2,21 +2,27 @@
   "name": "recetaria",
   "version": "1.0.0",
   "description": "Una API RESTful robusta diseñada para centralizar recetas, cruzando contenido generado por usuarios con validación estricta de profesionales clínicos y gastronómicos.",
-  "main": "index.js",
+  "main": "dist/server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "docker:config": "docker compose config -q",
     "docker:db": "docker compose up -d postgres",
     "docker:dev": "docker compose up --build",
     "docker:debug": "docker compose --profile debug up -d",
     "docker:prod": "docker compose -f compose.yaml up --build -d",
-    "docker:down": "docker compose down",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "docker:down": "docker compose down"
   },
   "repository": {
     "type": "git",
@@ -25,29 +31,34 @@
   "keywords": [],
   "author": "Facundo Nicolás González",
   "license": "MIT",
-  "type": "commonjs",
   "bugs": {
     "url": "https://github.com/zgfnicolas/recetaria/issues"
   },
   "homepage": "https://github.com/zgfnicolas/recetaria#readme",
   "dependencies": {
+    "@prisma/adapter-pg": "~7.10.1",
+    "@prisma/client": "~7.10.1",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
     "jsonwebtoken": "^9.0.3",
-    "zod": "^4.6.7",
-    "@prisma/client": "^7.10.1"
+    "pg": "^8.16.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^26.6.6",
-    "prisma": "^8.0.0-rc.33",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^7.0.2"
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "@types/supertest": "^6.0.3",
+    "prisma": "~7.10.1",
+    "supertest": "^7.1.0",
+    "tsx": "^4.20.0",
+    "typescript": "^7.0.2",
+    "vitest": "^3.2.0"
   },
   "allowScripts": {
     "bcrypt@6.0.0": true,

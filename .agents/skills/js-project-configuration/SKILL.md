@@ -32,8 +32,8 @@ description: >-
 | Línea | Estado (nov. 2026) | Uso recomendado |
 |---|---|---|
 | **26.x** *(Active LTS)* | Soportada hasta abril 2029 | Default para proyectos nuevos y destino de migración |
-| **24.x** *(Maintenance LTS)* | Soportada hasta abril 2028 | Proyectos existentes con dependencias bloqueadas en 26 |
-| **22.x** *(Maintenance LTS)* | Soportada hasta abril 2027 | Baseline actual del `Dockerfile` de Recetaria; planificar salto a 24/26 |
+| **24.x** *(Maintenance LTS)* | Soportada hasta abril 2028 | Baseline oficial de Recetaria API (`ADR-0006`: `.node-version`, `engines`, `@types/node@^24`, `node:24-bookworm-slim`) |
+| **22.x** *(Maintenance LTS)* | Soportada hasta abril 2027 | Baseline previa antes de `ADR-0006` |
 | **≤ 20.x** | EOL | Prohibido en producción |
 
 - Nunca acotes el gestor con techo superior de major (ej. `"npm": "<12"`), porque rompe instalaciones al actualizar npm.
@@ -54,7 +54,7 @@ description: >-
 
 ## 4. Dependencias, Overrides y Entorno
 
-- **Taxonomía:** todo lo importado en runtime (`express`, `zod`, `bcrypt`, `jsonwebtoken`, `cors`, `dotenv`, `@prisma/client`) va en `dependencies`. Build, tipos, linters, Prisma CLI y tests (`typescript`, `ts-node-dev`, `prisma`, `@types/*`, `vitest`, `supertest`, `lockfile-lint`) van en `devDependencies`.
+- **Taxonomía:** todo lo importado en runtime (`express`, `zod`, `bcrypt`, `jsonwebtoken`, `cors`, `dotenv`, `@prisma/client`, `@prisma/adapter-pg`, `pg`) va en `dependencies`. Build, tipos, linters, Prisma CLI, `tsx` y tests (`typescript`, `tsx`, `prisma`, `@types/*`, `vitest`, `supertest`, `lockfile-lint`) van en `devDependencies`.
 - **Antes de agregar un paquete:** verificá si Node nativo ya lo resuelve (`fetch`, `crypto.randomUUID`, `structuredClone`, `node:test`), revisá transitivas (`npm i <pkg> --dry-run`) e inspeccioná si trae install scripts.
 - **Overrides:** solo para parchear una transitiva vulnerable o unificar versiones. En `npm`, registrá cada clave de `overrides` en `docs/dependency-overrides.md` (`paquete | versión | CVE/motivo | fecha | dueño | condición de salida`); en `pnpm`, comentala en `pnpm-workspace.yaml`. Revisión mensual.
 - **Variables de entorno:** la consigna del TP requiere cargar `.env` con `dotenv` en desarrollo (en proyectos fuera del TP, `node --env-file-if-exists=.env` lo reemplaza); en producción se inyectan desde el orquestador/Compose. Todo script de `package.json` invoca binarios locales directo (`tsc`, `vitest`, `lockfile-lint`), nunca `npx`.

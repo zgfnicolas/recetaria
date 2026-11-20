@@ -4,26 +4,31 @@ Referencia ejecutable de [typescript-engineering](../SKILL.md) alineada a **Type
 
 ---
 
-## 1. Hoja de ruta de endurecimiento `tsconfig.json` (TS 7)
+## 1. Baseline `tsconfig.json` (TS 7 + ESM `nodenext`, `ADR-0006`)
 
-El [tsconfig.json](../../../../tsconfig.json) actual ya activa `strict` y `noUncheckedIndexedAccess`. Al endurecer para TS 7 (y al migrar a ESM/Node type stripping cuando se apruebe), apuntar a este baseline:
+Configuración objetivo para [tsconfig.json](../../../../tsconfig.json) con Node 24 LTS, ESM nativo y `tsx`:
 
 ```jsonc
 {
   "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
     "target": "es2024",
-    "module": "nodenext",                    // mantener "commonjs" hasta acordar migración a ESM
+    "lib": ["es2024"],
+    "types": ["node"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "strict": true,
     "noUncheckedIndexedAccess": true,        // arr[i] y record[k] => T | undefined
     "exactOptionalPropertyTypes": true,      // x?: T no admite undefined explícito
     "noImplicitOverride": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "noPropertyAccessFromIndexSignature": true,
     "verbatimModuleSyntax": true,            // obliga a usar `import type` para tipos
     "erasableSyntaxOnly": true,              // prohíbe enum, namespace con runtime y parameter properties
     "isolatedModules": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "sourceMap": true
   }
 }
 ```

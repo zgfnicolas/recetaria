@@ -14,9 +14,10 @@
 ## Matriz de permisos
 | Acción | Admin | Nutricionista | Chef | Usuario | Visitante |
 |---|:-:|:-:|:-:|:-:|:-:|
-| Consultar salud del servicio (`GET /health`) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Consultar salud del servicio (`GET /health`, `GET /health/ready`) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Registrarse e iniciar sesión (`POST /api/v1/auth/*`) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Listar y ver detalle de recetas (`GET /api/v1/recipes*`) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Listar (paginado) y ver detalle público de recetas (`GET /api/v1/recipes`, `/:id`) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Listar exclusivamente recetas propias (`GET /api/v1/recipes/mine`) | ✓ | ✓ | ✓ | ✓ | |
 | Crear receta (`POST /api/v1/recipes`) | ✓ | ✓ | ✓ | ✓ | |
 | Editar receta propia (`PUT /api/v1/recipes/:id`) | ✓ | ✓ | ✓ | ✓ | |
 | Eliminar receta propia (`DELETE /api/v1/recipes/:id`) | ✓ | ✓ | ✓ | ✓ | |
@@ -24,7 +25,8 @@
 | Aprobar receta de terceros (`PUT /api/v1/recipes/:id/approve`) | | ✓ | ✓ | | |
 
 ## Reglas especiales
-- **Visibilidad en lecturas públicas (`GET /api/v1/recipes` y `GET /api/v1/recipes/:id`):** por defecto devuelven todas las recetas (`DRAFT` y `APPROVED`) para permitir verificar el CRUD completo sin requerir aprobación previa; aceptan filtros opcionales `?status=`, `?difficulty=` y `?authorId=`.
+- **Visibilidad y paginación en lecturas públicas (`GET /api/v1/recipes` y `GET /api/v1/recipes/:id`):** por defecto devuelven recetas `DRAFT` y `APPROVED` ordenadas por `createdAt DESC, id DESC`, paginadas con `?page=1&limit=20` (máximo `100`) y filtros opcionales `?status=`, `?difficulty=` y `?authorId=`.
+- **Cuentas inactivas (`isActive = false`):** `POST /api/v1/auth/login` rechaza el inicio de sesión con `401 Unauthorized` genérico (`RN-08`); `authMiddleware` se mantiene 100 % stateless en el MVP.
 - **Propiedad exclusiva en edición (`RN-02`):** ningún usuario (ni siquiera `ADMIN`) puede editar una receta cuyo `authorId` no coincida con su `req.user.id`.
 - **Permiso de borrado (`RN-03`):** únicamente el autor original (`recipe.authorId === req.user.id`) o un usuario con rol `ADMIN` pueden eliminar una receta.
 - **Separación de funciones en aprobación (`RN-04` y `RN-05`):** solo `CHEF` o `NUTRITIONIST` pueden invocar `PUT /api/v1/recipes/:id/approve`, y nunca sobre una receta creada por ellos mismos (`recipe.authorId !== req.user.id`).

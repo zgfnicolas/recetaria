@@ -53,7 +53,7 @@ description: >-
 - **SSRF (OWASP API7):** para campos URL (`coverImageUrl`, `videoUrl` y futuros webhooks/importadores), exigir esquema `https:` en producción y, si el servidor descarga la URL, resolver DNS y bloquear rangos privados/link-local/metadata (`169.254.169.254`) sin seguir redirects ciegos.
 - **CORS y configuración (OWASP API8):** allowlist explícita de orígenes en producción (nunca `*` con credenciales); sin endpoints de debug expuestos.
 - **Timeouts de `http.Server`:** configurar `keepAliveTimeout` mayor al idle timeout del proxy/LB (ej. `65_000 ms`), `headersTimeout` mayor a `keepAliveTimeout` (`66_000 ms`) y `requestTimeout` (`30_000 ms`) para cortar requests lentas.
-- **Health checks:** `GET /health` en el MVP verifica PostgreSQL (`SELECT 1`, usado por el `HEALTHCHECK` del `Dockerfile`); al escalar detrás de balanceador, separar `/live` (sin DB) y `/ready` (con DB y bandera de drenaje).
+- **Health checks (`ADR-0006`):** `GET /health` es liveness liviano **sin** consultar PostgreSQL (usado por el `HEALTHCHECK` del `Dockerfile` para evitar reinicios en cascada); `GET /health/ready` es readiness verificando PostgreSQL (`SELECT 1`), devolviendo `200` o `503`.
 
 ## 4. Patrones de Evolución y Testing (Referencia bajo demanda)
 

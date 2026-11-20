@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # ==============================================================================
-# Stage 1: Base Runtime (Debian Bookworm Slim - glibc para bcrypt y Prisma)
+# Stage 1: Base Runtime (Node 24 LTS Bookworm Slim - glibc para bcrypt y Prisma 7)
 # ==============================================================================
-FROM node:22.14.0-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 
 # OpenSSL y ca-certificates requeridos por el query engine de Prisma ORM
 RUN apt-get update -y \
@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
 # ==============================================================================
-# Stage 3: Development (Entorno local con Hot-Reload y usuario no-root)
+# Stage 3: Development (Entorno local con Hot-Reload vía tsx y usuario no-root)
 # ==============================================================================
 FROM dependencies AS development
 
@@ -34,7 +34,7 @@ EXPOSE 3000
 CMD ["npm", "run", "dev"]
 
 # ==============================================================================
-# Stage 4: Build (Compilación de TypeScript y purga de devDependencies)
+# Stage 4: Build (Compilación de TypeScript ESM y purga de devDependencies)
 # ==============================================================================
 FROM dependencies AS build
 
@@ -43,21 +43,24 @@ RUN npm run build \
  && npm prune --omit=dev
 
 # ==============================================================================
-# Stage 5: Production Runtime (Artefacto mínimo, inmutable y No-Root)
+# Stage 5: Production Runtime (Artefacto mínimo, inmutable, solo lectura y No-Root)
 # ==============================================================================
 FROM base AS production
 
 ENV NODE_ENV=production \
-    PORT=3000
+    PORT=3000 \
+    NODE_OPTIONS="--max-old-space-size=384"
 
-COPY --from=build --chown=node:node /app/package.json ./package.json
-COPY --from=build --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/dist ./dist
+# Propiedad de root (sin --chown=node:node): USER node no puede modificar su propio código
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
 
 USER node
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+# Healthcheck en forma exec sin curl (liveness liviano en /health, sin consultar DB)
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/server.js"]

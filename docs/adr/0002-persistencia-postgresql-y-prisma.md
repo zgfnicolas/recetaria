@@ -1,7 +1,7 @@
 # 2. Usar PostgreSQL 15 y Prisma ORM para la persistencia
 
 Fecha: 2026-11-06
-Estado: Aceptada
+Estado: Aceptada *(actualizada parcialmente por [ADR-0005](0005-alcance-mvp-ciclo-recetas-y-auditoria.md) —retiro de `sessions`— y [ADR-0006](0006-estandarizacion-esm-prisma7-y-contratos-api.md) —alineación a Prisma 7 GA + `@prisma/adapter-pg`)*
 
 ## Contexto
 El dominio de Recetaria combina entidades fuertemente relacionadas (`users`, `recipes`, `sessions`, `audit_logs`) que requieren transacciones ACID al aprobar recetas (RN-06), junto con estructuras semiestructuradas para listas de ingredientes y valores nutricionales.

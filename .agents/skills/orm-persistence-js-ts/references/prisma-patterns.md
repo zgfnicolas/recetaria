@@ -269,7 +269,7 @@ async approveWithAudit(params: {
 
         await tx.auditLog.create({
           data: {
-            entityName: "recipes",
+            entityName: "Recipe",
             entityId: recipe.id,
             action: "APPROVE",
             userId: params.reviewerId,

@@ -1,7 +1,7 @@
 # 1. Usar Node.js, TypeScript estricto, Express 5 y Zod para el backend
 
 Fecha: 2026-11-06
-Estado: Aceptada
+Estado: Aceptada *(actualizada parcialmente por [ADR-0006](0006-estandarizacion-esm-prisma7-y-contratos-api.md): Node 24 LTS, ESM nativo y `tsx` en lugar de Node 22 y `ts-node-dev`)*
 
 ## Contexto
 Recetaria requiere construir una API RESTful segura y mantenible en un plazo académico de 2 semanas (MVP), con validación rigurosa de payloads JSON complejos (`ingredients`, `nutritionalInfo`) y bajo riesgo de errores en tiempo de ejecución.

@@ -25,9 +25,9 @@ Verificar el tamaño real enviado al daemon en la línea `transferring context` 
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-ARG NODE_VERSION=22.14.0
-# Fijar por digest real; actualizar vía Renovate/Dependabot
-FROM node:${NODE_VERSION}-bookworm-slim@sha256:<digest> AS base
+ARG NODE_VERSION=24-bookworm-slim
+# En Fase Beta fijar por digest real (@sha256:<digest>); actualizar vía Dependabot
+FROM node:${NODE_VERSION} AS base
 
 # OpenSSL y certificados para el query engine de Prisma en una sola capa limpia
 RUN apt-get update -y \
@@ -78,7 +78,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=20s --retries=3 \
   CMD ["node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
 
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/server.js"]
 ```
 
 - **Secretos de build (si hay registry privado):** `RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci` con `docker buildx build --secret id=npmrc,src=$HOME/.npmrc .`. Jamás `ARG TOKEN` ni `ENV TOKEN`.

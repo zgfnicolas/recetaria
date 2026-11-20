@@ -12,7 +12,7 @@ description: >-
 
 # Contenedores Docker de Producción (Recetaria API)
 
-Baseline: Docker Engine + BuildKit/Buildx + **Compose v2** ([Dockerfile](../../../Dockerfile), [compose.yaml](../../../compose.yaml), [compose.override.yaml](../../../compose.override.yaml), [.dockerignore](../../../.dockerignore)), runtime **`node:22.14.0-bookworm-slim`** (`glibc` requerido por Prisma y `bcrypt`) y **`postgres:15.12-alpine`**.
+Baseline: Docker Engine + BuildKit/Buildx + **Compose v2** ([Dockerfile](../../../Dockerfile), [compose.yaml](../../../compose.yaml), [compose.override.yaml](../../../compose.override.yaml), [.dockerignore](../../../.dockerignore)), runtime objetivo **`node:24-bookworm-slim`** (`ADR-0006`, `glibc` requerido por Prisma 7 y `bcrypt`) y **`postgres:15.12-alpine`**.
 Prioridades: **Seguridad → Reproducibilidad/Trazabilidad → Correctitud operativa (señales, salud, estado) → Observabilidad → Tamaño/velocidad de build**.
 
 > [!NOTE]
@@ -32,7 +32,7 @@ Antes de diseñar o auditar, relevar: runtime y dependencias nativas (`glibc`, O
 5. Prohibido `privileged: true`, montar `/var/run/docker.sock` o `network_mode: host` sin excepción documentada.
 6. En producción solo el proxy inverso publica puertos hacia el exterior; servicios internos sin `ports:` (en dev solo `127.0.0.1:...`).
 7. Estado de negocio fuera de la capa escribible (volúmenes nombrados o DB gestionada).
-8. PID 1 correcto (`CMD ["node", "dist/index.js"]` en forma exec + `init: true`) y graceful shutdown dentro de `stop_grace_period`.
+8. PID 1 correcto (`CMD ["node", "dist/server.js"]` en forma exec + `init: true`) y graceful shutdown dentro de `stop_grace_period`.
 9. Logs JSON a `stdout`/`stderr` con driver `local` y rotación configurada en el host.
 10. Escaneo bloqueante en CI (`Trivy`/secretos/`hadolint`), SBOM/provenance/firma (`Cosign`) y escaneo continuo de lo publicado.
 
@@ -52,15 +52,13 @@ Antes de diseñar o auditar, relevar: runtime y dependencias nativas (`glibc`, O
   - En **PG 15–17** (Recetaria actual): volumen en `/var/lib/postgresql/data`.
   - En **PG 18+**: el layout oficial cambió a `/var/lib/postgresql`. Verificar antes de cualquier upgrade mayor.
   - Definir `shm_size: 256m`, `stop_grace_period: 60s` y `healthcheck` con `pg_isready`. Un volumen local no es un backup ni evita punto único de falla.
-- **Salud y señales:** liveness (`/health`) liviano **sin** consultar PostgreSQL (evita reinicios en cascada); readiness aparte si verifica DB. Docker standalone no reinicia contenedores `unhealthy`; `depends_on: service_healthy` ordena arranque pero no sustituye reconexión/backoff en la app.
+- **Salud y señales:** liveness (`GET /health`) liviano **sin** consultar PostgreSQL (evita reinicios en cascada); readiness (`GET /health/ready`) verifica DB (`SELECT 1`). Docker standalone no reinicia contenedores `unhealthy`; `depends_on: service_healthy` ordena arranque pero no sustituye reconexión/backoff en la app.
 
-## 3. Brechas actuales del repo hacia producción madura
+## 3. Hardening por fases (`ADR-0006`)
 
-Al auditar los archivos actuales de Recetaria ([Dockerfile](../../../Dockerfile) y [compose.yaml](../../../compose.yaml)), priorizar estas mejoras cuando el usuario apruebe tocar Docker:
-1. Fijar bases `node:22.14.0-bookworm-slim` y `postgres:15.12-alpine` por `@sha256:<digest>` + agregar `LABEL org.opencontainers.image.*`.
-2. Quitar `--chown=node:node` en el stage `production` para que el código sea solo lectura para `USER node`, y usar forma exec en `HEALTHCHECK`.
-3. Migrar `POSTGRES_PASSWORD` / `JWT_SECRET` de `environment:` a `secrets:` + `*_FILE`, y separar `app_runtime` de `postgres` superuser.
-4. Añadir `NODE_OPTIONS=--max-old-space-size=384` en `api` y `shm_size: 256m` en `postgres`.
+Al operar los archivos Docker de Recetaria ([Dockerfile](../../../Dockerfile) y [compose.yaml](../../../compose.yaml)):
+- **Fase 2 (MVP endurecido sin fricción):** actualizar base a `node:24-bookworm-slim`, `CMD ["node", "dist/server.js"]`, quitar `--chown=node:node` en `production` (código solo lectura para `USER node`), `HEALTHCHECK` en forma exec contra `/health`, `NODE_OPTIONS=--max-old-space-size=384` y `shm_size: 256m` en `postgres`.
+- **Fase Beta / Producción:** fijar bases por `@sha256:<digest>` + `LABEL org.opencontainers.image.*`, migrar `POSTGRES_PASSWORD` / `JWT_SECRET` a `secrets:` + `*_FILE` y separar `recetaria_runtime` de `postgres` superuser.
 
 ## 4. Colaboración y delegación
 

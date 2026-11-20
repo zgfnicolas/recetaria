@@ -5,7 +5,7 @@ Adoptamos el modelo **Testing Trophy** priorizando pruebas de integración HTTP 
 
 | Nivel | Peso | Herramienta | Enfoque |
 |---|:-:|---|---|
-| **Unitarias** | 20 % | Vitest / Jest | Lógica pura de negocio en `*.service.ts` y validaciones Zod |
+| **Unitarias** | 20 % | Vitest | Lógica pura de negocio en `*.service.ts` y validaciones Zod 4 |
 | **Integración** | 50 % | Supertest + PostgreSQL Docker | Endpoints reales, middlewares, transacciones `$transaction` y errores Prisma |
 | **Aceptación / API** | 30 % | Thunder Client | Colección exportada cubriendo casos felices y errores HTTP obligatorios |
 

@@ -59,7 +59,7 @@ export function triageEdgeCase(c: EdgeCaseInput): readonly [Verdict, string] {
 ### 2.1 Se cubren siempre (parecen raros, no lo son)
 | Caso en Recetaria API | Solución simple y robusta |
 |---|---|
-| Doble clic / carrera concurrente en `POST /recipes/:id/approve` | Update condicional atómico (`status = 'DRAFT'`) en `prisma.$transaction` → `409` |
+| Doble clic / carrera concurrente en `PUT /api/v1/recipes/:id/approve` | Update condicional atómico (`status = 'DRAFT'`) en `prisma.$transaction` → `409` |
 | Fallo a mitad de `APPROVE`, `RESET_TO_DRAFT` o `DELETE` (`RN-06`) | `prisma.$transaction` envolviendo `recipes` + `audit_logs` |
 | Usuario intentando editar/aprobar/borrar receta ajena o propia (`RN-02`–`RN-05`) | Autorización por objeto en `recipePolicy` + `rbacMiddleware` |
 | Input vacío, fuera de rango (`prepTimeMinutes`), campos extra (BOPLA) o enorme | `z.strictObject(...)` en borde + `express.json({ limit: "100kb" })` |

@@ -41,7 +41,7 @@ Elegí el nivel por módulo según su complejidad real; distintos módulos puede
 - **Cuándo subir a L2:** cuando aparece una regla compleja que conviene testear como entidad pura sin DB, un segundo adapter real o un segundo consumidor además de Express.
 - **Cuándo bajar de nivel:** si una capa queda vacía o es puro pasamanos sin valor, eliminala.
 
-## 3. Estructura de proyecto (Node 22 + Express 5 + Prisma)
+## 3. Estructura de proyecto (Node 24 LTS ESM + Express 5 + Prisma 7)
 
 ```text
 src/

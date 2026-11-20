@@ -58,8 +58,8 @@ CREATE TABLE recipes (
 
     -- Relational Integrity Constraints and Policies
     CONSTRAINT chk_prep_time_positive CHECK ("prepTimeMinutes" > 0 AND "prepTimeMinutes" <= 1440),
-    CONSTRAINT fk_recipes_author FOREIGN KEY ("authorId") REFERENCES users(id) ON DELETE RESTRICT ON UPDATE CASCADE,
-    CONSTRAINT fk_recipes_reviewer FOREIGN KEY ("reviewedById") REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
+    CONSTRAINT fk_recipes_author FOREIGN KEY ("authorId") REFERENCES users(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_recipes_reviewer FOREIGN KEY ("reviewedById") REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE audit_logs (
@@ -75,19 +75,20 @@ CREATE TABLE audit_logs (
     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     -- If the user who performed the action is deleted, the log becomes orphaned (set to NULL) so that traceability is not lost.
-    CONSTRAINT fk_audit_logs_user FOREIGN KEY ("userId") REFERENCES users(id) ON DELETE SET NULL ON UPDATE CASCADE
+    CONSTRAINT fk_audit_logs_user FOREIGN KEY ("userId") REFERENCES users(id) ON DELETE SET NULL
 );
 
+COMMENT ON COLUMN audit_logs."entityId" IS
+    'ID de la entidad afectada; sin FK hacia recipes por diseño (RN-06) para conservar trazabilidad tras DELETE físico.';
 
--- 4. INDEXES (B-Tree query optimization)
+
+-- 4. INDEXES (B-Tree query optimization; email y slug ya tienen índice único implícito por UNIQUE)
 -- Indexes for users
-CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role_isactive ON users(role, "isActive");
 
 -- Indices for recipes
 CREATE INDEX idx_recipes_authorid ON recipes("authorId");
 CREATE INDEX idx_recipes_status_difficulty ON recipes(status, difficulty);
-CREATE INDEX idx_recipes_slug ON recipes(slug);
 
 -- Indexes for auditing
 CREATE INDEX idx_audit_logs_entity ON audit_logs("entityName", "entityId");

@@ -3,13 +3,13 @@
 Resumen técnico de los artefactos de contenerización en la raíz (`Dockerfile`, `compose.yaml`, `compose.override.yaml`, `.dockerignore`).
 
 ## 1. Dockerfile Multi-Stage (5 etapas)
-Base fijada: `node:22.14.0-bookworm-slim` (compatibilidad `glibc` para Prisma y compilación nativa de `bcrypt`).
+Base estándar (`ADR-0006`): `node:24-bookworm-slim` (compatibilidad `glibc` para Prisma 7 y compilación nativa de `bcrypt`).
 
-1. **`base`**: imagen Node 22 slim con `WORKDIR /app`.
+1. **`base`**: imagen Node 24 slim con `WORKDIR /app`.
 2. **`deps`**: instala dependencias deterministas con `npm ci` usando BuildKit cache mount (`/root/.npm`) y ejecuta `prisma generate`.
-3. **`development`**: target local con `ts-node-dev` bajo `USER node`.
+3. **`development`**: target local con `tsx watch src/server.ts` bajo `USER node`.
 4. **`build`**: compila TypeScript (`npm run build`) y poda dependencias de desarrollo (`npm prune --omit=dev`).
-5. **`runtime` (`production`)**: copia únicamente `dist/` y `node_modules/` productivos, corre como `USER node` (`uid=1000`), usa `HEALTHCHECK` nativo con `node -e "fetch(...)"` (sin `curl`) y `CMD ["node", "dist/index.js"]` en formato exec para manejar `SIGTERM`.
+5. **`runtime` (`production`)**: copia únicamente `dist/` y `node_modules/` productivos (propiedad de `root`, solo lectura para `USER node`), corre como `USER node` (`uid=1000`), usa `HEALTHCHECK` en forma exec con `node` sobre `GET /health` (liveness sin DB) y `CMD ["node", "dist/server.js"]` en formato exec para manejar `SIGTERM`.
 
 ## 2. Composición (`compose.yaml` y `compose.override.yaml`)
 - **Producción (`compose.yaml`):**

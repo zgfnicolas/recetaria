@@ -1,7 +1,7 @@
 # 4. Autenticación JWT stateless y contrato de respuesta JSend extendido
 
 Fecha: 2026-11-06
-Estado: Aceptada
+Estado: Aceptada *(nota: la tabla `sessions` mencionada como mitigación futura fue diferida fuera del MVP en [ADR-0005](0005-alcance-mvp-ciclo-recetas-y-auditoria.md))*
 
 ## Contexto
 La API será consumida por colecciones de Thunder Client, pruebas automatizadas con Supertest y futuros clientes web/mobile. Se necesita un esquema de autenticación sin estado en servidor y un formato homogéneo de respuestas de éxito y error.
