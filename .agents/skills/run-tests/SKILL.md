@@ -25,3 +25,7 @@ description: >-
 
 ## 4. Privacidad en logs
 Nunca imprimas contraseñas en texto plano, tokens JWT completos ni cadenas `DATABASE_URL` al diagnosticar errores.
+
+## 5. Skills relacionadas
+- Estrategia basada en riesgo (inventario P0/P1, oráculos, prueba de sensibilidad, Vitest endurecido, `Stryker`, `k6` y gates de CI): [critical-path-testing](../critical-path-testing/SKILL.md).
+- Persistencia Prisma 7, Testcontainers PostgreSQL 15 y mapeo de errores `P2002`/`P2025`/`P2034`: [orm-persistence-js-ts](../orm-persistence-js-ts/SKILL.md).

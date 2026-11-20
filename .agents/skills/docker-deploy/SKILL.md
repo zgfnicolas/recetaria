@@ -27,3 +27,7 @@ npm run docker:down     # Detiene contenedores preservando postgres_data
 4. Confirmar que `.env.example` lista todas las variables (`NODE_ENV`, `PORT`, `POSTGRES_*`, `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`) sin valores reales.
 
 Para el detalle técnico completo del Dockerfile multi-stage, hardening y checklist de 30 puntos, consultá [docker-architecture.md](./references/docker-architecture.md).
+
+## 3. Skills relacionadas
+- Diseño, endurecimiento de `Dockerfile`/`compose.yaml`, secretos `*_FILE`, CI/CD (Trivy/SBOM/Cosign) y verificación de producción: [docker-production-containers](../docker-production-containers/SKILL.md).
+- Operación interna, roles, upgrades y backups/PITR de PostgreSQL: [postgresql-engineering](../postgresql-engineering/SKILL.md).

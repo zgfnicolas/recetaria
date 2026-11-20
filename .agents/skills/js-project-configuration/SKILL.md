@@ -68,7 +68,7 @@ Consultá [`references/configs-and-ci.md`](./references/configs-and-ci.md) cuand
 - `src/server.ts` (*graceful shutdown* con `closeIdleConnections()`, `prisma.$disconnect()` y `SHUTDOWN_TIMEOUT_MS = 10_000`).
 - `.github/workflows/ci.yml` (npm por defecto + variante pnpm), `renovate.json` y `.github/dependabot.yml`.
 
-*(Para estructura modular en 4 capas usá `layered-architecture-ts`; para el Dockerfile multi-stage y Compose endurecido usá `docker-deploy`.)*
+*(Para estructura modular en 4 capas usá [layered-architecture-ts](../layered-architecture-ts/SKILL.md); para Dockerfile multi-stage y Compose endurecido usá [docker-production-containers](../docker-production-containers/SKILL.md) y [docker-deploy](../docker-deploy/SKILL.md); para hooks Git, Conventional Commits y `.gitattributes` usá [git-workflow-engineering](../git-workflow-engineering/SKILL.md); para rulesets, Dependabot y políticas de Actions en GitHub usá [github-repository-governance](../github-repository-governance/SKILL.md).)*
 
 ## 6. Antipatrones a evitar
 

@@ -58,7 +58,7 @@ src/
     └── http/jsend.ts         # helpers tipados de sobre JSend
 ```
 
-*(Para contratos Zod, interfaces de `Auth` y `Recipes` y secuencia de creación de rutas, usá la skill `nuevo-endpoint`.)*
+*(Para contratos Zod, interfaces de `Auth` y `Recipes` y secuencia de creación de rutas, usá [nuevo-endpoint](../nuevo-endpoint/SKILL.md). Para la implementación de la capa `repository.ts` con Prisma 7, `@prisma/adapter-pg`, pool y mapeo de errores `P2002`/`SQLSTATE`, usá [orm-persistence-js-ts](../orm-persistence-js-ts/SKILL.md). Para tipado fuerte TS 7, `Result` vs `AppError`, Big-O y límites de complejidad, usá [typescript-engineering](../typescript-engineering/SKILL.md).)*
 
 ## 4. Patrones y tooling ejecutable (Referencia bajo demanda)
 
