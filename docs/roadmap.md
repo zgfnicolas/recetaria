@@ -10,6 +10,8 @@ Objetivo: entregar una API REST funcional para `Auth` y `Recipes` con arquitectu
 
 **Criterio de salida:** 100 % de los endpoints del MVP cubriendo códigos `200`, `201`, `400`, `401`, `403`, `404` y `409`, `npm run build` sin errores ni `any` implícitos, y ejecución exitosa en Docker Compose.
 
+**Seguimiento en vivo:** [GitHub Project — Recetaria MVP TP Integrador](https://github.com/users/zgfnicolas/projects/3) · [Milestone `v0.1.0 — MVP TP Integrador`](https://github.com/zgfnicolas/recetaria/milestone/1) *(fuente única de verdad para las Specs `#1`–`#6` y Tickets `#7`–`#24`)*
+
 ## Próximo — v1.0 (Alfa y Beta)
 Objetivo: incorporar interacción comunitaria (UGC) y verificación documental de profesionales.
 - **Módulo Social (Alfa):** likes, comentarios y sistema de seguidores entre usuarios
