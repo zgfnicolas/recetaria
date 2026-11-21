@@ -20,6 +20,10 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Suite de integración relacional contra PostgreSQL 15 (`tests/integration/database/relational-integrity.test.ts`: catálogo de motor, `P2002`, `omit` en runtime, los 4 `CHECK` en `INSERT`/`UPDATE`, triggers reales de `updatedAt`, `ON DELETE RESTRICT`/`SET NULL` y supervivencia en `audit_logs`).
 - Script de seed idempotente en Prisma (`prisma/seed.ts`, alias `db:seed` vía `tsx`) para los 4 roles RBAC (`USER`, `CHEF`, `NUTRITIONIST`, `ADMIN`) con Bcrypt (`>= 10` rounds, `RN-08`), guarda *allowlist* para `NODE_ENV=development|test` y cierre ordenado de Prisma + `pg.Pool`.
 - Suite de integración de repetibilidad del seed contra PostgreSQL 15 (`tests/integration/database/seed.test.ts`: roles, Bcrypt, idempotencia secuencial/parcial/concurrente, guarda de entorno, cero fugas en logs y cierre limpio del pool).
+- Módulo de validación *fail fast* de entorno con Zod 4 (`src/config/env.ts`: `parseEnv`, `loadEnv`, objeto congelado `Env`, defaults `NODE_ENV=development`, `PORT=3000`, `JWT_EXPIRES_IN=1d` y cero fuga de secretos en mensajes de error).
+- Jerarquía tipada de errores operacionales (`src/shared/errors/app-error.ts`: `AppError` compatible con `erasableSyntaxOnly` y `exactOptionalPropertyTypes`, `freezeErrorDetails` y subclases `BadRequestError`, `UnauthorizedError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `ServiceUnavailableError`).
+- Contrato **JSend extendido** (`src/shared/http/jsend.ts`: tipos discriminados, builders puros `buildSuccessResponse`/`buildErrorResponse` con `errors: []` por defecto, y emisores `sendSuccess`/`sendError`).
+- Suites unitarias en Vitest junto al código fuente (`src/config/env.test.ts`, `src/shared/errors/app-error.test.ts`, `src/shared/http/jsend.test.ts`: 93 pruebas unitarias).
 - `docs/dependency-overrides.md` con el override de `effect` (GHSA-7589-6fvf-x4pw).
 
 ### Cambiado
@@ -32,6 +36,7 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - `vitest.config.ts`: habilitado `fileParallelism: false` para aislar `TRUNCATE` entre suites de integración sobre PostgreSQL compartido.
 - `docs/data_model.md`: actualizado para reflejar las migraciones SQL de Prisma como fuente DDL operativa junto a `prisma/schema.prisma` y documentar las 4 restricciones `CHECK`.
 - `tsconfig.test.json`: incluye `prisma/seed.ts` dentro de la verificación estricta `typecheck:test`; actualizados `docs/data_model.md`, `docs/prd.md` y `README.md` con el flujo de seed en Prisma.
+- `tsconfig.json` y `tsconfig.test.json`: excluido `src/**/*.test.ts` de la compilación productiva (`dist/`) manteniendo la verificación estricta de todas las pruebas en `typecheck:test`.
 
 ### Eliminado
 - Archivos redundantes en la raíz (`llm.txt`, `llms-full.txt`, `architecture.md`, `instructions.md`, `CLAUDE.local.md`, `.mcp.json`, `LICENSE.md`).
