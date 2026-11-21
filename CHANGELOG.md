@@ -16,6 +16,8 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Scripts `db:validate`, `db:format`, `db:generate` y `typecheck:test`; `prebuild`, `pretypecheck` y `pretest` generan el cliente de Prisma.
 - Módulo singleton de persistencia (`src/infrastructure/database/prisma.ts`) con `pg.Pool`, adaptador `@prisma/adapter-pg`, exclusión por defecto de `passwordHash` (`omit`) y cierre ordenado `disconnect()`.
 - Configuración de Vitest ESM (`vitest.config.ts`, `tsconfig.test.json`, `tests/setup/env.ts`) y prueba real de conectividad contra PostgreSQL 15 (`tests/integration/database/connectivity.test.ts`).
+- Migración SQL inicial versionada de Prisma (`20261121201424_init`) con extensión `pgcrypto`, 4 restricciones `CHECK` en `recipes` (`chk_prep_time_positive`, `chk_recipes_reviewer_not_author`, `chk_recipes_ingredients_array`, `chk_recipes_nutritional_info_object`), triggers `BEFORE UPDATE` de `updatedAt` en `users`/`recipes` y `COMMENT ON COLUMN audit_logs."entityId"`.
+- Suite de integración relacional contra PostgreSQL 15 (`tests/integration/database/relational-integrity.test.ts`: catálogo de motor, `P2002`, `omit` en runtime, los 4 `CHECK` en `INSERT`/`UPDATE`, triggers reales de `updatedAt`, `ON DELETE RESTRICT`/`SET NULL` y supervivencia en `audit_logs`).
 - `docs/dependency-overrides.md` con el override de `effect` (GHSA-7589-6fvf-x4pw).
 
 ### Cambiado
@@ -24,7 +26,9 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Simplificación de `README.md`, `CONTRIBUTING.md`, `AGENTS.md` y `CLAUDE.md` (`@AGENTS.md`).
 - Licencia formal en `LICENSE` (MIT) alineada con `package.json`.
 - `vitest` actualizado a `^5.1.1` para corregir advisories de `tinypool` y `@vitest/mocker`.
-- `compose.override.yaml`: `networks.data.internal: false` solo en desarrollo para que Docker Engine 28+/29 publique los puertos locales en `127.0.0.1` (`postgres` y `adminer`), manteniendo `compose.yaml` endurecido en producción.
+- `compose.override.yaml`: `networks.data.internal: false` solo en desarrollo para que Docker Engine 28+/29 publique los puertos locales en `127.0.0.1` (`postgres` y `adminer`), manteniendo `compose.yaml` endurecido en producción; retirado el montaje `01-init.sql` de `database_schema_init.sql` para que las migraciones de Prisma gestionen el esquema desde cero.
+- `vitest.config.ts`: habilitado `fileParallelism: false` para aislar `TRUNCATE` entre suites de integración sobre PostgreSQL compartido.
+- `docs/data_model.md`: actualizado para reflejar las migraciones SQL de Prisma como fuente DDL operativa junto a `prisma/schema.prisma` y documentar las 4 restricciones `CHECK`.
 
 ### Eliminado
 - Archivos redundantes en la raíz (`llm.txt`, `llms-full.txt`, `architecture.md`, `instructions.md`, `CLAUDE.local.md`, `.mcp.json`, `LICENSE.md`).
