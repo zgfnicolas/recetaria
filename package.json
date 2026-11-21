@@ -24,6 +24,7 @@
     "db:validate": "prisma validate",
     "db:format": "prisma format",
     "db:generate": "prisma generate",
+    "db:seed": "prisma db seed",
     "docker:config": "docker compose config -q",
     "docker:db": "docker compose up -d postgres",
     "docker:dev": "docker compose up --build",
