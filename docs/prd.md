@@ -1,5 +1,5 @@
 # PRD — Recetaria API
-Versión 1.3 · Última actualización: 2026-11-20 · Responsable: Facundo Nicolás González
+Versión 1.3 · Última actualización: 2026-11-21 · Responsable: Facundo Nicolás González
 
 ## 1. Visión
 Centralizar un catálogo confiable de recetas gastronómicas donde el contenido generado por la comunidad es validado clínica y culinariamente por nutricionistas y chefs profesionales.
@@ -90,5 +90,5 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 
 ## 9. Supuestos y riesgos
 - **Alcance congelado para el MVP:** se diferen funcionalidades sociales, subida a S3, KYC documental y `sessions` persistentes para respetar la entrega de 2 semanas sin deuda de estados huérfanos.
-- **Alta de roles para evaluación:** `POST /api/v1/auth/register` admite `role` opcional y `database_schema_init.sql` siembra 4 usuarios base (`user`, `chef`, `nutri`, `admin`) para probar todos los flujos en Thunder Client; en una fase productiva futura el alta de roles privilegiados se restringirá vía KYC.
+- **Alta de roles para evaluación:** `POST /api/v1/auth/register` admite `role` opcional y [`prisma/seed.ts`](../prisma/seed.ts) (`npx prisma db seed` / `npm run db:seed`) siembra de forma idempotente los 4 usuarios base (`user`, `chef`, `nutri`, `admin`) para probar todos los flujos en Thunder Client; en una fase productiva futura el alta de roles privilegiados se restringirá vía KYC.
 - **Filtros sobre JSONB:** las búsquedas iniciales indexan columnas escalares (`status`, `difficulty`, `authorId`); el parseo avanzado dentro de `ingredients` queda para fases posteriores.

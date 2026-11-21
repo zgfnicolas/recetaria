@@ -121,7 +121,7 @@ Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO
   - `chk_recipes_ingredients_array`: `CHECK (jsonb_typeof("ingredients") = 'array')`.
   - `chk_recipes_nutritional_info_object`: `CHECK ("nutritionalInfo" IS NULL OR jsonb_typeof("nutritionalInfo") = 'object')` *(en Prisma usar `Prisma.DbNull` para limpiar la columna a SQL `NULL`; `Prisma.JsonNull` escribe JSON `'null'` y es rechazado por el `CHECK`)*.
 - **Triggers:** `trg_users_updated_at` y `trg_recipes_updated_at` ejecutan `update_updated_at_column()` en `BEFORE UPDATE` para actualizar `"updatedAt" = NOW()`.
-- **Seed inicial:** `database_schema_init.sql` conserva los 4 usuarios de referencia (`user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com`, `admin@recetaria.com`); el seed idempotente en Prisma (`prisma/seed.ts`) se implementa en el ticket `#9`.
+- **Seed inicial:** [`prisma/seed.ts`](../prisma/seed.ts) (vía `npx prisma db seed` o `npm run db:seed` con `tsx`) siembra de forma idempotente (`createMany` con `skipDuplicates: true`, `ON CONFLICT DO NOTHING`) los 4 usuarios base RBAC (`user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com`, `admin@recetaria.com`) con `isActive = true`, Bcrypt (`>= 10` rounds, `RN-08`) y guarda *allowlist* en `NODE_ENV=development|test` (bloqueado en producción y otros entornos). [`database_schema_init.sql`](../database_schema_init.sql) conserva los mismos 4 perfiles como referencia histórica.
 
 ## Políticas referenciales
 | Relación | Restricción (FK) | `ON DELETE` | `ON UPDATE` | Motivo |

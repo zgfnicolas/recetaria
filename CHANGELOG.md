@@ -18,6 +18,8 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Configuración de Vitest ESM (`vitest.config.ts`, `tsconfig.test.json`, `tests/setup/env.ts`) y prueba real de conectividad contra PostgreSQL 15 (`tests/integration/database/connectivity.test.ts`).
 - Migración SQL inicial versionada de Prisma (`20261121201424_init`) con extensión `pgcrypto`, 4 restricciones `CHECK` en `recipes` (`chk_prep_time_positive`, `chk_recipes_reviewer_not_author`, `chk_recipes_ingredients_array`, `chk_recipes_nutritional_info_object`), triggers `BEFORE UPDATE` de `updatedAt` en `users`/`recipes` y `COMMENT ON COLUMN audit_logs."entityId"`.
 - Suite de integración relacional contra PostgreSQL 15 (`tests/integration/database/relational-integrity.test.ts`: catálogo de motor, `P2002`, `omit` en runtime, los 4 `CHECK` en `INSERT`/`UPDATE`, triggers reales de `updatedAt`, `ON DELETE RESTRICT`/`SET NULL` y supervivencia en `audit_logs`).
+- Script de seed idempotente en Prisma (`prisma/seed.ts`, alias `db:seed` vía `tsx`) para los 4 roles RBAC (`USER`, `CHEF`, `NUTRITIONIST`, `ADMIN`) con Bcrypt (`>= 10` rounds, `RN-08`), guarda *allowlist* para `NODE_ENV=development|test` y cierre ordenado de Prisma + `pg.Pool`.
+- Suite de integración de repetibilidad del seed contra PostgreSQL 15 (`tests/integration/database/seed.test.ts`: roles, Bcrypt, idempotencia secuencial/parcial/concurrente, guarda de entorno, cero fugas en logs y cierre limpio del pool).
 - `docs/dependency-overrides.md` con el override de `effect` (GHSA-7589-6fvf-x4pw).
 
 ### Cambiado
@@ -29,6 +31,7 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - `compose.override.yaml`: `networks.data.internal: false` solo en desarrollo para que Docker Engine 28+/29 publique los puertos locales en `127.0.0.1` (`postgres` y `adminer`), manteniendo `compose.yaml` endurecido en producción; retirado el montaje `01-init.sql` de `database_schema_init.sql` para que las migraciones de Prisma gestionen el esquema desde cero.
 - `vitest.config.ts`: habilitado `fileParallelism: false` para aislar `TRUNCATE` entre suites de integración sobre PostgreSQL compartido.
 - `docs/data_model.md`: actualizado para reflejar las migraciones SQL de Prisma como fuente DDL operativa junto a `prisma/schema.prisma` y documentar las 4 restricciones `CHECK`.
+- `tsconfig.test.json`: incluye `prisma/seed.ts` dentro de la verificación estricta `typecheck:test`; actualizados `docs/data_model.md`, `docs/prd.md` y `README.md` con el flujo de seed en Prisma.
 
 ### Eliminado
 - Archivos redundantes en la raíz (`llm.txt`, `llms-full.txt`, `architecture.md`, `instructions.md`, `CLAUDE.local.md`, `.mcp.json`, `LICENSE.md`).
