@@ -21,6 +21,7 @@ cd recetaria
 cp .env.example .env
 # Completar .env con los valores locales indicados abajo
 npm install
+npm run db:generate
 npm run docker:db
 npx prisma migrate deploy
 npm run dev
@@ -82,10 +83,14 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 | `npm run dev` | Inicia el servidor local en desarrollo con `tsx watch src/server.ts` |
 | `npm run build` | Compila TypeScript a `dist/` verificando tipos |
 | `npm run typecheck` | Valida tipos sin emitir archivos (`tsc --noEmit`) |
+| `npm run typecheck:test` | Valida tipos en `src/`, `tests/`, `vitest.config.ts` y `prisma.config.ts` sin emitir archivos |
 | `npm start` | Ejecuta el compilado en producción (`dist/server.js`) |
 | `npm test` | Ejecuta la suite de pruebas con Vitest |
+| `npm run db:validate` | Valida `prisma/schema.prisma` (no requiere `.env`) |
+| `npm run db:format` | Formatea `prisma/schema.prisma` |
+| `npm run db:generate` | Genera el cliente en `src/generated/prisma/` (ignorado en Git; corre automáticamente antes de `build`, `typecheck`, `typecheck:test` y `test`) |
 | `npm run docker:db` | Levanta solo PostgreSQL 15 en segundo plano |
-| `npm run docker:dev` | Levanta API y PostgreSQL en Docker con hot-reload |
+| `npm run docker:dev` | Levanta API y PostgreSQL en Docker con hot-reload (ejecutar antes `npm run db:generate` en el host) |
 | `npm run docker:debug` | Levanta PostgreSQL y Adminer en `http://127.0.0.1:8080` |
 | `npm run docker:prod` | Levanta la imagen endurecida de producción (`compose.yaml`) |
 | `npm run docker:down` | Detiene y remueve los contenedores preservando los datos |

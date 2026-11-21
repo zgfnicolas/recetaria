@@ -35,3 +35,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+networks:
+  data:
+    # Solo en dev: Docker Engine 28+/29 no publica puertos en 127.0.0.1
+    # para contenedores conectados únicamente a una red internal: true.
+    # En producción (compose.yaml) la red data se mantiene internal: true.
+    internal: false

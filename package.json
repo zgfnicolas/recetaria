@@ -12,11 +12,18 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "prebuild": "npm run db:generate",
     "build": "tsc",
+    "pretypecheck": "npm run db:generate",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "npm run db:generate && tsc -p tsconfig.test.json",
     "start": "node dist/server.js",
+    "pretest": "npm run db:generate",
     "test": "vitest run",
     "test:watch": "vitest",
+    "db:validate": "prisma validate",
+    "db:format": "prisma format",
+    "db:generate": "prisma generate",
     "docker:config": "docker compose config -q",
     "docker:db": "docker compose up -d postgres",
     "docker:dev": "docker compose up --build",
@@ -58,10 +65,15 @@
     "supertest": "^7.1.0",
     "tsx": "^4.20.0",
     "typescript": "^7.0.2",
-    "vitest": "^3.2.0"
+    "vitest": "^5.1.1"
+  },
+  "overrides": {
+    "effect": "^3.22.1"
   },
   "allowScripts": {
+    "@prisma/engines@7.10.1": true,
     "bcrypt@6.0.0": true,
-    "esbuild@0.28.2": true
+    "esbuild@0.28.2": true,
+    "prisma@7.10.1": true
   }
 }

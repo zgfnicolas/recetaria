@@ -30,7 +30,5 @@ Todo módulo (`Auth`, `Recipes`) debe contar con pruebas verificando:
 ## 4. Comandos
 ```bash
 npm test                 # Ejecuta pruebas unitarias y de integración
-npm run test:watch       # Modo observador durante desarrollo (cuando se configure el runner)
+npm run test:watch       # Modo observador durante desarrollo
 ```
-
-*(Nota: la suite automatizada en `package.json` se configurará en el setup inicial de `src/` y `tests/`).*

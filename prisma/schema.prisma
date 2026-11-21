@@ -1,0 +1,104 @@
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // La URL se define en prisma.config.ts (Prisma 7)
+}
+
+enum Role {
+  USER
+  CHEF
+  NUTRITIONIST
+  ADMIN
+}
+
+enum RecipeStatus {
+  DRAFT
+  APPROVED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+  EXPERT
+}
+
+model User {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @db.VarChar(255)
+  firstName    String   @db.VarChar(100)
+  lastName     String   @db.VarChar(100)
+  role         Role     @default(USER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  authoredRecipes Recipe[]   @relation("RecipeAuthor")
+  reviewedRecipes Recipe[]   @relation("RecipeReviewer")
+  auditLogs       AuditLog[]
+
+  // Sin índice extra sobre email: UNIQUE ya crea su índice (ADR-0006)
+  @@index([role, isActive], map: "idx_users_role_isactive")
+  @@map("users")
+}
+
+model Recipe {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title           String       @db.VarChar(150)
+  slug            String       @unique @db.VarChar(200)
+  description     String       @db.Text
+  difficulty      Difficulty   @default(MEDIUM)
+  status          RecipeStatus @default(DRAFT)
+  prepTimeMinutes Int          @db.SmallInt
+  tags            String[]     @default([]) @db.VarChar(50)
+  ingredients     Json         @db.JsonB
+  nutritionalInfo Json?        @db.JsonB
+  coverImageUrl   String?      @db.VarChar(512)
+  videoUrl        String?      @db.VarChar(512)
+  authorId        String       @db.Uuid
+  reviewedById    String?      @db.Uuid
+  publishedAt     DateTime?    @db.Timestamptz(6)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime     @default(now()) @updatedAt @db.Timestamptz(6)
+
+  // Prohibido Cascade en tablas de negocio (ADR-0002 / ADR-0006 / database-migrations.md)
+  // onUpdate: NoAction explícito: evita el ON UPDATE CASCADE por defecto de Prisma
+  author     User  @relation("RecipeAuthor", fields: [authorId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_recipes_author")
+  reviewedBy User? @relation("RecipeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_recipes_reviewer")
+
+  @@index([authorId], map: "idx_recipes_authorid")
+  @@index([status, difficulty], map: "idx_recipes_status_difficulty")
+  @@map("recipes")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityName String   @db.VarChar(50)
+  /// Sin FK a recipes a propósito (RN-06): el registro sobrevive al DELETE físico
+  entityId   String   @db.Uuid
+  action     String   @db.VarChar(50)
+  userId     String?  @db.Uuid
+  oldValues  Json?    @db.JsonB
+  newValues  Json?    @db.JsonB
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_audit_logs_user")
+
+  @@index([entityName, entityId], map: "idx_audit_logs_entity")
+  @@index([createdAt], map: "idx_audit_logs_createdat")
+  @@index([userId], map: "idx_audit_logs_userid")
+  @@map("audit_logs")
+}
+
+// Constraints CHECK (prepTimeMinutes, RN-05, JSONB), triggers de updatedAt, permisos append-only de audit_logs y COMMENT
+
+// se definen en SQL fuera de Prisma (ver docs/data_model.md y docs/compliance.md).
