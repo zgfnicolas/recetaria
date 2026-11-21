@@ -99,6 +99,7 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// Constraints CHECK (prepTimeMinutes, RN-05, JSONB), triggers de updatedAt, permisos append-only de audit_logs y COMMENT
-
-// se definen en SQL fuera de Prisma (ver docs/data_model.md y docs/compliance.md).
+// Extensión pgcrypto, constraints CHECK (chk_prep_time_positive, chk_recipes_reviewer_not_author,
+// chk_recipes_ingredients_array, chk_recipes_nutritional_info_object), triggers BEFORE UPDATE de updatedAt
+// y COMMENT ON COLUMN audit_logs."entityId" viven en la migración SQL inicial de Prisma (ver docs/data_model.md).
+// Permisos append-only y roles separados de DB se difieren a Fase Beta/Producción (ver docs/adr/0006 y docs/sad.md).

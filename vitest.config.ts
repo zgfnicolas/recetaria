@@ -6,6 +6,7 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     setupFiles: ["./tests/setup/env.ts"],
     pool: "forks",
+    fileParallelism: false,
     restoreMocks: true,
     unstubEnvs: true,
     unstubGlobals: true,

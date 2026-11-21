@@ -1,6 +1,6 @@
 # Modelo de datos
 
-Fuente de verdad del esquema: [`prisma/schema.prisma`](../prisma/schema.prisma) (Prisma 7) y el esquema SQL inicial [`database_schema_init.sql`](../database_schema_init.sql) (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y semillas iniciales de prueba para los 4 roles RBAC.
+Fuente DDL operativa del esquema: [`prisma/schema.prisma`](../prisma/schema.prisma) (Prisma 7) junto con las migraciones SQL versionadas de Prisma (`20261121201424_init`). El archivo [`database_schema_init.sql`](../database_schema_init.sql) se conserva como referencia inicial histórica (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y usuarios semilla de referencia para los 4 roles RBAC.
 
 ## Diagrama ER
 ```mermaid
@@ -88,12 +88,12 @@ Entidad principal con el contenido, metadatos nutricionales y estado de validaci
 | `status` | `RecipeStatus` | No | Estado de validación (`DRAFT` o `APPROVED`), por defecto `'DRAFT'` |
 | `prepTimeMinutes` | `SMALLINT` | No | Tiempo en minutos (`CHECK ("prepTimeMinutes" > 0 AND "prepTimeMinutes" <= 1440)`) |
 | `tags` | `VARCHAR(50)[]` | No | Etiquetas dietarias (máx. 20 ítems de ≤ 50 caracteres en Zod), por defecto `'{}'` |
-| `ingredients` | `JSONB` | No | Lista estructurada de ingredientes (`name`, `quantity`, `unit`) |
-| `nutritionalInfo` | `JSONB` | Sí | Objeto nutricional opcional tipado (`calories`, `proteinGrams`, `carbsGrams`, `fatGrams`, `fiberGrams`, `servings`) |
+| `ingredients` | `JSONB` | No | Lista estructurada de ingredientes (`name`, `quantity`, `unit`), con `CHECK (jsonb_typeof("ingredients") = 'array')` |
+| `nutritionalInfo` | `JSONB` | Sí | Objeto nutricional opcional tipado (`calories`, `proteinGrams`, `carbsGrams`, `fatGrams`, `fiberGrams`, `servings`), con `CHECK ("nutritionalInfo" IS NULL OR jsonb_typeof("nutritionalInfo") = 'object')` |
 | `coverImageUrl` | `VARCHAR(512)` | Sí | URL de portada |
 | `videoUrl` | `VARCHAR(512)` | Sí | URL de video corto |
 | `authorId` | `UUID (FK)` | No | Autor que creó la receta (`-> users.id`) |
-| `reviewedById` | `UUID (FK)` | Sí | Profesional que aprobó la receta (`-> users.id`) |
+| `reviewedById` | `UUID (FK)` | Sí | Profesional que aprobó la receta (`-> users.id`), con `CHECK ("reviewedById" IS NULL OR "reviewedById" <> "authorId")` (`RN-05`) |
 | `publishedAt` | `TIMESTAMPTZ` | Sí | Fecha y hora de aprobación |
 | `createdAt` | `TIMESTAMPTZ` | No | Fecha de creación (`NOW()`) |
 | `updatedAt` | `TIMESTAMPTZ` | No | Última actualización (trigger automático) |
@@ -112,10 +112,16 @@ Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO
 | `newValues` | `JSONB` | Sí | Snapshot posterior al cambio |
 | `createdAt` | `TIMESTAMPTZ` | No | Marca temporal del evento (`NOW()`) |
 
-### Índices, triggers y datos semilla
-- **Índices B-Tree:** `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_audit_logs_entity`, `idx_audit_logs_createdat`, `idx_audit_logs_userid` (más los índices únicos implícitos de `UNIQUE(email)` y `UNIQUE(slug)`; los índices redundantes `idx_users_email` e `idx_recipes_slug` y `ON UPDATE CASCADE` se retiran en el saneamiento SQL de Fase 2 según `ADR-0006`).
+### Índices, restricciones CHECK, triggers y datos semilla
+- **Extensión y catálogo:** la migración inicial `20261121201424_init` habilita `pgcrypto` (`gen_random_uuid()`) y registra `COMMENT ON COLUMN "audit_logs"."entityId"` documentando la ausencia intencional de FK hacia `recipes` (`RN-06`).
+- **Índices B-Tree:** `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_audit_logs_entity`, `idx_audit_logs_createdat`, `idx_audit_logs_userid`, más los índices únicos implícitos de `UNIQUE(email)` y `UNIQUE(slug)`. Sin índices redundantes sobre `email`/`slug` ni `ON UPDATE CASCADE` (`ADR-0006`).
+- **Restricciones `CHECK` en `recipes`:**
+  - `chk_prep_time_positive`: `CHECK ("prepTimeMinutes" > 0 AND "prepTimeMinutes" <= 1440)` (`RN-07`).
+  - `chk_recipes_reviewer_not_author`: `CHECK ("reviewedById" IS NULL OR "reviewedById" <> "authorId")` (`RN-05`).
+  - `chk_recipes_ingredients_array`: `CHECK (jsonb_typeof("ingredients") = 'array')`.
+  - `chk_recipes_nutritional_info_object`: `CHECK ("nutritionalInfo" IS NULL OR jsonb_typeof("nutritionalInfo") = 'object')` *(en Prisma usar `Prisma.DbNull` para limpiar la columna a SQL `NULL`; `Prisma.JsonNull` escribe JSON `'null'` y es rechazado por el `CHECK`)*.
 - **Triggers:** `trg_users_updated_at` y `trg_recipes_updated_at` ejecutan `update_updated_at_column()` en `BEFORE UPDATE` para actualizar `"updatedAt" = NOW()`.
-- **Seed inicial:** `database_schema_init.sql` inserta con `ON CONFLICT (email) DO NOTHING` 4 usuarios iniciales (`user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com`, `admin@recetaria.com`) para facilitar pruebas de roles.
+- **Seed inicial:** `database_schema_init.sql` conserva los 4 usuarios de referencia (`user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com`, `admin@recetaria.com`); el seed idempotente en Prisma (`prisma/seed.ts`) se implementa en el ticket `#9`.
 
 ## Políticas referenciales
 | Relación | Restricción (FK) | `ON DELETE` | `ON UPDATE` | Motivo |
