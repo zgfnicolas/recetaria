@@ -10,6 +10,7 @@ node_modules
 dist
 build
 coverage
+src/generated
 .nyc_output
 *.tsbuildinfo
 
@@ -25,12 +26,18 @@ tmp
 .env
 .env.*
 !.env.example
+secrets/
+*.pem
+*.key
 
-# Archivos de configuración de IA y documentación (no requeridos en imagen de build/runtime)
+# Archivos de configuración de IA, tests y documentación (no requeridos en imagen de build/runtime)
 .agents
 .github
 scripts
 docs
+tests
+vitest.config.ts
+tsconfig.test.json
 *.md
 LICENSE
 database_schema_init.sql

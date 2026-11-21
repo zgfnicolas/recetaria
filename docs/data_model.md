@@ -1,6 +1,6 @@
 # Modelo de datos
 
-Fuente de verdad del esquema SQL inicial: [`database_schema_init.sql`](../database_schema_init.sql) (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y semillas iniciales de prueba para los 4 roles RBAC.
+Fuente de verdad del esquema: [`prisma/schema.prisma`](../prisma/schema.prisma) (Prisma 7) y el esquema SQL inicial [`database_schema_init.sql`](../database_schema_init.sql) (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y semillas iniciales de prueba para los 4 roles RBAC.
 
 ## Diagrama ER
 ```mermaid
@@ -113,17 +113,17 @@ Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO
 | `createdAt` | `TIMESTAMPTZ` | No | Marca temporal del evento (`NOW()`) |
 
 ### Índices, triggers y datos semilla
-- **Índices B-Tree:** `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_audit_logs_entity`, `idx_audit_logs_createdat` (más los índices únicos implícitos de `UNIQUE(email)` y `UNIQUE(slug)`; los índices redundantes `idx_users_email` e `idx_recipes_slug` y `ON UPDATE CASCADE` se retiran en el saneamiento SQL de Fase 2 según `ADR-0006`).
+- **Índices B-Tree:** `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_audit_logs_entity`, `idx_audit_logs_createdat`, `idx_audit_logs_userid` (más los índices únicos implícitos de `UNIQUE(email)` y `UNIQUE(slug)`; los índices redundantes `idx_users_email` e `idx_recipes_slug` y `ON UPDATE CASCADE` se retiran en el saneamiento SQL de Fase 2 según `ADR-0006`).
 - **Triggers:** `trg_users_updated_at` y `trg_recipes_updated_at` ejecutan `update_updated_at_column()` en `BEFORE UPDATE` para actualizar `"updatedAt" = NOW()`.
 - **Seed inicial:** `database_schema_init.sql` inserta con `ON CONFLICT (email) DO NOTHING` 4 usuarios iniciales (`user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com`, `admin@recetaria.com`) para facilitar pruebas de roles.
 
 ## Políticas referenciales
-| Relación | Al borrar el padre | Motivo |
-|---|---|---|
-| `users → recipes (authorId)` | `RESTRICT` | Impide borrar físicamente un usuario si tiene recetas asociadas; obliga a preservar autoría |
-| `users → recipes (reviewedById)` | `SET NULL` | Preserva la receta si se da de baja el usuario revisor; el historial permanece en `audit_logs` |
-| `users → audit_logs (userId)` | `SET NULL` | Garantiza la inmutabilidad del registro de auditoría aunque se elimine el usuario |
-| `audit_logs.entityId` (sin FK a `recipes`) | `N/A` (conservado) | Permite ejecutar borrado físico en `DELETE /api/v1/recipes/:id` manteniendo íntegro el registro histórico del evento `DELETE` |
+| Relación | Restricción (FK) | `ON DELETE` | `ON UPDATE` | Motivo |
+|---|---|---|---|---|
+| `users → recipes (authorId)` | `fk_recipes_author` | `RESTRICT` | `NO ACTION` | Impide borrar físicamente un usuario si tiene recetas asociadas; obliga a preservar autoría |
+| `users → recipes (reviewedById)` | `fk_recipes_reviewer` | `SET NULL` | `NO ACTION` | Preserva la receta si se da de baja el usuario revisor; el historial permanece en `audit_logs` |
+| `users → audit_logs (userId)` | `fk_audit_logs_user` | `SET NULL` | `NO ACTION` | Garantiza la inmutabilidad del registro de auditoría aunque se elimine el usuario |
+| `audit_logs.entityId` (sin FK a `recipes`) | `N/A` | `N/A` (conservado) | `N/A` | Permite ejecutar borrado físico en `DELETE /api/v1/recipes/:id` manteniendo íntegro el registro histórico del evento `DELETE` |
 
 ## Datos sensibles
 | Campo | Clasificación | Tratamiento |
