@@ -88,8 +88,8 @@ let singleton: Database | undefined;
 /**
  * Devuelve el singleton por proceso (inicialización perezosa en el primer uso).
  */
-export function getDatabase(): Database {
-  singleton ??= createDatabase(readDatabaseUrl());
+export function getDatabase(connectionString?: string): Database {
+  singleton ??= createDatabase(connectionString ?? readDatabaseUrl());
   return singleton;
 }
 
