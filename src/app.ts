@@ -1,9 +1,13 @@
 import cors, { type CorsOptions } from "cors";
-import express, { type Express, type Router } from "express";
+import express, { type Express } from "express";
+import { buildApiRouters, isAppPrismaClient, type MountedRouter } from "./bootstrap/container.js";
+import type { AppPrismaClient } from "./infrastructure/database/prisma.js";
 import { createErrorHandlerMiddleware, type ErrorLogger } from "./middlewares/error-handler.middleware.js";
 import { createLoggerMiddleware, type LogWriter } from "./middlewares/logger.middleware.js";
 import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
 import { createHealthRouter, type ReadinessDatabaseClient } from "./shared/http/health.router.js";
+
+export type { MountedRouter } from "./bootstrap/container.js";
 
 export const BODY_LIMIT = "100kb";
 export const API_V1_PREFIX = "/api/v1";
@@ -22,13 +26,8 @@ function createDefaultCorsOptions(): CorsOptions {
 
 export const DEFAULT_CORS_OPTIONS: Readonly<CorsOptions> = Object.freeze(createDefaultCorsOptions());
 
-export type MountedRouter = Readonly<{
-  path: string;
-  router: Router;
-}>;
-
 export type BuildAppOptions = Readonly<{
-  prisma?: ReadinessDatabaseClient | undefined;
+  prisma?: AppPrismaClient | ReadinessDatabaseClient | undefined;
   readinessTimeoutMs?: number | undefined;
   apiRouters?: readonly MountedRouter[] | undefined;
   cors?: CorsOptions | undefined;
@@ -69,7 +68,11 @@ export function buildApp(options?: BuildAppOptions): Express {
 
   // 5. Routers de negocio versionados bajo /api/v1
   const apiV1Router = express.Router();
-  for (const mounted of options?.apiRouters ?? []) {
+  const mountedRouters =
+    options?.apiRouters ??
+    (isAppPrismaClient(options?.prisma) ? buildApiRouters(options.prisma) : []);
+
+  for (const mounted of mountedRouters) {
     if (!mounted.path.startsWith("/")) {
       throw new RangeError(`La ruta del router debe comenzar con '/': ${mounted.path}`);
     }

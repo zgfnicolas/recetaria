@@ -30,6 +30,9 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Sondas de salud operativas separadas en `src/shared/http/health.router.ts` (`GET /health` liveness puro sin acceso a DB y `GET /health/ready` readiness con `SELECT 1` sobre PostgreSQL, coalescencia *single-flight* ante ráfagas concurrentes y timeout acotado de `2000ms`), montadas en `src/app.ts` antes de parsers y autenticación con `Cache-Control: no-store` y respuestas en sobre JSend extendido (`200` / `503` redactado).
 - Servidor HTTP ejecutable con apagado ordenado en `src/server.ts` → `dist/server.js` (`applyServerTimeouts` con `keepAliveTimeout: 65s`, `headersTimeout: 66s` y `requestTimeout: 30s`; `createDrainingHttpServer` + `createGracefulShutdown` idempotente con drenaje de conexiones `keep-alive` en curso mediante `Connection: close` + `closeIdleConnections()`, propagación de fallos fatales durante el drenaje hacia código `1`, corte forzado en `10s` con `closeAllConnections()`, limpieza del singleton Prisma + `pg.Pool` vía `disconnect()`, manejo de `SIGTERM`/`SIGINT`/`uncaughtException`/`unhandledRejection`/`server.on("error")` y guarda `isMainModule()`).
 - Pruebas unitarias y de integración HTTP de sondas y servidor (`src/shared/http/health.router.test.ts` [13], `src/server.test.ts` [18] y `tests/integration/http/health.test.ts` [5] contra PostgreSQL 15 en Docker y subproceso `isMainModule()`: 36 pruebas nuevas).
+- Módulo `Auth` en 4 capas estrictas (`src/modules/auth/`: `auth.schema.ts`, `user.repository.ts`, `auth.service.ts`, `auth.controller.ts`, `auth.router.ts` e `index.ts`) habilitando `POST /api/v1/auth/register` con Zod 4 `z.strictObject` (prevención BOPLA, normalización de `email` y límite de `72` bytes UTF-8 para Bcrypt), cifrado Bcrypt `>= 10` rounds (`RN-08`), proyección sin `passwordHash` y mapeo de `P2002` a `409 Conflict`.
+- Composition root de routers de negocio en `src/bootstrap/container.ts` (`buildApiRouters`, `isAppPrismaClient`) con grafo acíclico consumiendo `src/modules/auth/index.ts`.
+- Pruebas unitarias y de integración HTTP de registro de usuarios (`src/modules/auth/auth.schema.test.ts` [25], `auth.service.test.ts` [11], `auth.controller.test.ts` [4] y `tests/integration/http/auth-register.test.ts` [12] contra PostgreSQL 15 en Docker: 52 pruebas nuevas).
 - `docs/dependency-overrides.md` con el override de `effect` (GHSA-7589-6fvf-x4pw).
 
 ### Cambiado
@@ -45,6 +48,7 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - `tsconfig.json` y `tsconfig.test.json`: excluido `src/**/*.test.ts` de la compilación productiva (`dist/`) manteniendo la verificación estricta de todas las pruebas en `typecheck:test`.
 - `src/infrastructure/database/prisma.ts`: `getDatabase(connectionString?: string)` acepta opcionalmente la URL validada por `loadEnv()` manteniendo compatibilidad con invocaciones sin argumentos.
 - `src/app.ts`: `BuildAppOptions` incorpora `prisma` (`ReadinessDatabaseClient`) y `readinessTimeoutMs`, montando las sondas de salud entre CORS y los body parsers.
+- `src/app.ts`: `BuildAppOptions.prisma` acepta `AppPrismaClient | ReadinessDatabaseClient` y monta automáticamente `/api/v1/auth` vía `buildApiRouters` cuando recibe el cliente Prisma completo sin sobreescribir `apiRouters`.
 
 ### Eliminado
 - Archivos redundantes en la raíz (`llm.txt`, `llms-full.txt`, `architecture.md`, `instructions.md`, `CLAUDE.local.md`, `.mcp.json`, `LICENSE.md`).
