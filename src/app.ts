@@ -3,6 +3,7 @@ import express, { type Express, type Router } from "express";
 import { createErrorHandlerMiddleware, type ErrorLogger } from "./middlewares/error-handler.middleware.js";
 import { createLoggerMiddleware, type LogWriter } from "./middlewares/logger.middleware.js";
 import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
+import { createHealthRouter, type ReadinessDatabaseClient } from "./shared/http/health.router.js";
 
 export const BODY_LIMIT = "100kb";
 export const API_V1_PREFIX = "/api/v1";
@@ -27,6 +28,8 @@ export type MountedRouter = Readonly<{
 }>;
 
 export type BuildAppOptions = Readonly<{
+  prisma?: ReadinessDatabaseClient | undefined;
+  readinessTimeoutMs?: number | undefined;
   apiRouters?: readonly MountedRouter[] | undefined;
   cors?: CorsOptions | undefined;
   trustProxy?: boolean | number | string | undefined;
@@ -52,7 +55,13 @@ export function buildApp(options?: BuildAppOptions): Express {
   // 2. CORS explícito (clona arreglos por instancia para evitar mutación compartida)
   app.use(cors(options?.cors ?? createDefaultCorsOptions()));
 
-  // 3. Espacio reservado antes de parsers para /health y /health/ready (Spec 02.3)
+  // 3. Sondas operativas de salud (antes de parsers y autenticación)
+  app.use(
+    createHealthRouter({
+      prisma: options?.prisma,
+      readinessTimeoutMs: options?.readinessTimeoutMs,
+    }),
+  );
 
   // 4. Parsers con límite de tamaño (OWASP API4)
   app.use(express.json({ limit: BODY_LIMIT }));
