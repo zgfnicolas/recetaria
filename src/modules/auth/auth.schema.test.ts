@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_BCRYPT_PASSWORD_BYTES, registerSchema } from "./auth.schema.js";
+import { loginSchema, MAX_BCRYPT_PASSWORD_BYTES, registerSchema } from "./auth.schema.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 
@@ -250,8 +250,11 @@ describe("registerSchema (Zod 4 strictObject / BOPLA)", () => {
     { label: "raíz array", payload: [] },
     { label: "raíz string", payload: "texto" },
   ])("rechaza tipos inválidos y raíces no-objeto ($label)", ({ payload }) => {
+    // Arrange
+    const candidate = payload;
+
     // Act
-    const parsed = registerSchema.safeParse(payload);
+    const parsed = registerSchema.safeParse(candidate);
 
     // Assert
     expect(parsed.success).toBe(false);
@@ -283,6 +286,153 @@ describe("registerSchema (Zod 4 strictObject / BOPLA)", () => {
       if (unrecognizedIssue?.code === "unrecognized_keys") {
         expect(unrecognizedIssue.keys).toEqual(
           expect.arrayContaining(["isActive", "id", "passwordHash", "createdAt"]),
+        );
+      }
+    }
+  });
+});
+
+describe("loginSchema (Zod 4 strictObject / BOPLA)", () => {
+  it("acepta payload válido, normaliza email, preserva espacios en password y acepta bordes válidos", () => {
+    // Arrange
+    const exact255Email = `${"a".repeat(60)}@${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.${"e".repeat(7)}.com`;
+
+    // Act
+    const validWithSpaces = loginSchema.safeParse({
+      email: "  User.Test@Recetaria.COM  ",
+      password: "  test password spaces  ",
+    });
+    const validMinBoundary = loginSchema.safeParse({
+      email: exact255Email,
+      password: "x",
+    });
+
+    // Assert
+    expect(validWithSpaces.success).toBe(true);
+    if (validWithSpaces.success) {
+      expect(validWithSpaces.data).toEqual({
+        email: "user.test@recetaria.com",
+        password: "  test password spaces  ",
+      });
+    }
+    expect(exact255Email).toHaveLength(255);
+    expect(validMinBoundary.success).toBe(true);
+  });
+
+  it("rechaza payload vacío reportando email y password", () => {
+    // Arrange
+    const emptyPayload = {};
+
+    // Act
+    const parsed = loginSchema.safeParse(emptyPayload);
+
+    // Assert
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      const fields = parsed.error.issues.map((issue) => String(issue.path[0]));
+      expect(fields).toEqual(expect.arrayContaining(["email", "password"]));
+    }
+  });
+
+  it.each([
+    {
+      label: "email faltante",
+      payload: { password: "password123" },
+      expectedField: "email",
+      expectedMessage: "El correo electrónico es obligatorio",
+    },
+    {
+      label: "email malformado",
+      payload: { email: "no-es-email", password: "password123" },
+      expectedField: "email",
+      expectedMessage: "Formato de email inválido",
+    },
+    {
+      label: "email de solo espacios",
+      payload: { email: "   ", password: "password123" },
+      expectedField: "email",
+      expectedMessage: "Formato de email inválido",
+    },
+    {
+      label: "email de 256 caracteres",
+      payload: {
+        email: `${"a".repeat(60)}@${"b".repeat(60)}.${"c".repeat(60)}.${"d".repeat(60)}.${"e".repeat(8)}.com`,
+        password: "password123",
+      },
+      expectedField: "email",
+      expectedMessage: "El correo electrónico no puede superar los 255 caracteres",
+    },
+    {
+      label: "contraseña vacía",
+      payload: { email: "user@recetaria.com", password: "" },
+      expectedField: "password",
+      expectedMessage: "La contraseña es obligatoria",
+    },
+  ])(
+    "rechaza $label reportando campo y mensaje exacto",
+    ({ payload, expectedField, expectedMessage }) => {
+      // Arrange
+      const candidate = payload;
+
+      // Act
+      const parsed = loginSchema.safeParse(candidate);
+
+      // Assert
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(parsed.error.issues).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              path: [expectedField],
+              message: expectedMessage,
+            }),
+          ]),
+        );
+      }
+    },
+  );
+
+  it.each([
+    { label: "email numérico", payload: { email: 123, password: "password123" } },
+    { label: "password null", payload: { email: "user@recetaria.com", password: null } },
+    { label: "raíz null", payload: null },
+    { label: "raíz array", payload: [] },
+    { label: "raíz string", payload: "texto" },
+  ])("rechaza tipos erróneos y raíces no-objeto ($label)", ({ payload }) => {
+    // Arrange
+    const candidate = payload;
+
+    // Act
+    const parsed = loginSchema.safeParse(candidate);
+
+    // Assert
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rechaza propiedades extra no permitidas (prevención BOPLA con z.strictObject)", () => {
+    // Arrange
+    const boplaPayload = {
+      email: "user@recetaria.com",
+      password: "password123",
+      role: "ADMIN",
+      isActive: true,
+      rememberMe: true,
+      id: "550e8400-e29b-41d4-a716-446655440000",
+    };
+
+    // Act
+    const parsed = loginSchema.safeParse(boplaPayload);
+
+    // Assert
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      const unrecognizedIssue = parsed.error.issues.find(
+        (issue) => issue.code === "unrecognized_keys",
+      );
+      expect(unrecognizedIssue).toBeDefined();
+      if (unrecognizedIssue?.code === "unrecognized_keys") {
+        expect(unrecognizedIssue.keys).toEqual(
+          expect.arrayContaining(["role", "isActive", "rememberMe", "id"]),
         );
       }
     }

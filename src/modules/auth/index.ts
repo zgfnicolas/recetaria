@@ -1,22 +1,36 @@
 export { AuthController } from "./auth.controller.js";
 export { createAuthRouter } from "./auth.router.js";
 export {
+  loginSchema,
   MAX_BCRYPT_PASSWORD_BYTES,
   registerSchema,
   USER_ROLES,
+  type LoginDTO,
   type RegisterDTO,
   type UserRole,
 } from "./auth.schema.js";
 export {
   AuthService,
   BCRYPT_SALT_ROUNDS,
+  DUMMY_BCRYPT_HASH,
+  INVALID_CREDENTIALS_MESSAGE,
   type AuthServiceOptions,
+  type AuthSession,
   type IAuthService,
   type RegisteredUser,
 } from "./auth.service.js";
 export {
+  assertValidJwtConfig,
+  JWT_ALGORITHM,
+  MIN_JWT_SECRET_LENGTH,
+  signAccessToken,
+  type Actor,
+  type JwtConfig,
+} from "./jwt.js";
+export {
   UserRepository,
   type CreateUserInput,
   type IUserRepository,
+  type UserAuthRecord,
   type UserRecord,
 } from "./user.repository.js";

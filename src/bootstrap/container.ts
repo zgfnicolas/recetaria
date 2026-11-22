@@ -5,12 +5,19 @@ import {
   AuthService,
   createAuthRouter,
   UserRepository,
+  type JwtConfig,
 } from "../modules/auth/index.js";
 import type { ReadinessDatabaseClient } from "../shared/http/health.router.js";
+
+export type { JwtConfig } from "../modules/auth/index.js";
 
 export type MountedRouter = Readonly<{
   path: string;
   router: Router;
+}>;
+
+export type BuildApiRoutersOptions = Readonly<{
+  jwt?: JwtConfig | undefined;
 }>;
 
 /**
@@ -31,9 +38,12 @@ export function isAppPrismaClient(
 /**
  * Composition root por aplicación: ensambla repositorios, servicios, controladores y routers `/api/v1`.
  */
-export function buildApiRouters(prisma: AppPrismaClient): readonly MountedRouter[] {
+export function buildApiRouters(
+  prisma: AppPrismaClient,
+  options?: BuildApiRoutersOptions,
+): readonly MountedRouter[] {
   const userRepository = new UserRepository(prisma);
-  const authService = new AuthService(userRepository);
+  const authService = new AuthService(userRepository, { jwt: options?.jwt });
   const authController = new AuthController(authService);
   const authRouter = createAuthRouter(authController);
 

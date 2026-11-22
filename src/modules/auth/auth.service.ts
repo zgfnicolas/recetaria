@@ -1,14 +1,30 @@
 import * as bcrypt from "bcrypt";
-import { ConflictError } from "../../shared/errors/app-error.js";
-import type { RegisterDTO, UserRole } from "./auth.schema.js";
+import { AppError, ConflictError, UnauthorizedError } from "../../shared/errors/app-error.js";
+import {
+  MAX_BCRYPT_PASSWORD_BYTES,
+  type LoginDTO,
+  type RegisterDTO,
+  type UserRole,
+} from "./auth.schema.js";
+import { assertValidJwtConfig, signAccessToken, type JwtConfig } from "./jwt.js";
 import type { IUserRepository } from "./user.repository.js";
 
 /** Factor de costo mínimo exigido para Bcrypt (`RN-08`). */
 export const BCRYPT_SALT_ROUNDS = 10;
 const MAX_BCRYPT_SALT_ROUNDS = 31;
 
+/** Mensaje genérico compartido para todo fallo de autenticación (`RN-08`). */
+export const INVALID_CREDENTIALS_MESSAGE = "Credenciales inválidas";
+
+/** Hash Bcrypt válido (costo 10) usado en comparaciones timing-safe cuando el email no existe. */
+export const DUMMY_BCRYPT_HASH =
+  "$2b$10$EpRnTzVlqHNP0.fUbXUwSOyuiXe/QLSUG6xNekdHgTGmrpHEfIoxm";
+
+const DUMMY_COMPARE_PASSWORD = "invalid-dummy-compare-password";
+
 export type AuthServiceOptions = Readonly<{
   saltRounds?: number | undefined;
+  jwt?: JwtConfig | undefined;
 }>;
 
 export type RegisteredUser = Readonly<{
@@ -17,8 +33,14 @@ export type RegisteredUser = Readonly<{
   role: UserRole;
 }>;
 
+export type AuthSession = Readonly<{
+  token: string;
+  user: RegisteredUser;
+}>;
+
 export interface IAuthService {
   register(dto: RegisterDTO): Promise<RegisteredUser>;
+  login(dto: LoginDTO): Promise<AuthSession>;
 }
 
 /**
@@ -27,6 +49,8 @@ export interface IAuthService {
 export class AuthService implements IAuthService {
   readonly #userRepository: IUserRepository;
   readonly #saltRounds: number;
+  readonly #dummyPasswordHash: string;
+  readonly #jwtConfig: JwtConfig | undefined;
 
   constructor(userRepository: IUserRepository, options?: AuthServiceOptions) {
     const saltRounds = options?.saltRounds ?? BCRYPT_SALT_ROUNDS;
@@ -40,8 +64,22 @@ export class AuthService implements IAuthService {
       );
     }
 
+    if (options?.jwt !== undefined) {
+      assertValidJwtConfig(options.jwt);
+      this.#jwtConfig = Object.freeze({
+        secret: options.jwt.secret,
+        expiresIn: options.jwt.expiresIn,
+      });
+    } else {
+      this.#jwtConfig = undefined;
+    }
+
     this.#userRepository = userRepository;
     this.#saltRounds = saltRounds;
+    this.#dummyPasswordHash =
+      saltRounds === BCRYPT_SALT_ROUNDS
+        ? DUMMY_BCRYPT_HASH
+        : bcrypt.hashSync(DUMMY_COMPARE_PASSWORD, saltRounds);
   }
 
   /**
@@ -68,6 +106,40 @@ export class AuthService implements IAuthService {
       id: createdUser.id,
       email: createdUser.email,
       role: createdUser.role,
+    };
+  }
+
+  /**
+   * Autentica un usuario activo emitiendo un JWT `HS256` stateless con payload mínimo `{ id, role }`.
+   * Ejecuta comparación timing-safe ante email inexistente, clave errónea o cuenta inactiva (`RN-08`).
+   */
+  async login(dto: LoginDTO): Promise<AuthSession> {
+    if (this.#jwtConfig === undefined) {
+      throw new AppError(500, "Configuración JWT no inicializada", { isOperational: false });
+    }
+
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const user = await this.#userRepository.findAuthByEmail(normalizedEmail);
+
+    const isWithinBcryptLimit =
+      Buffer.byteLength(dto.password, "utf8") <= MAX_BCRYPT_PASSWORD_BYTES;
+    const candidatePassword = isWithinBcryptLimit ? dto.password : DUMMY_COMPARE_PASSWORD;
+    const hashToCompare = user?.passwordHash ?? this.#dummyPasswordHash;
+    const passwordMatches = await bcrypt.compare(candidatePassword, hashToCompare);
+
+    if (user === null || !user.isActive || !isWithinBcryptLimit || !passwordMatches) {
+      throw new UnauthorizedError(INVALID_CREDENTIALS_MESSAGE);
+    }
+
+    const token = signAccessToken({ id: user.id, role: user.role }, this.#jwtConfig);
+
+    return {
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
     };
   }
 }
