@@ -20,10 +20,14 @@ export {
   type RegisteredUser,
 } from "./auth.service.js";
 export {
+  accessTokenPayloadSchema,
   assertValidJwtConfig,
+  assertValidJwtSecret,
+  INVALID_TOKEN_MESSAGE,
   JWT_ALGORITHM,
   MIN_JWT_SECRET_LENGTH,
   signAccessToken,
+  verifyAccessToken,
   type Actor,
   type JwtConfig,
 } from "./jwt.js";

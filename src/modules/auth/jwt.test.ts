@@ -1,15 +1,26 @@
+import { generateKeyPairSync } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { describe, expect, it } from "vitest";
+import { UnauthorizedError } from "../../shared/errors/app-error.js";
 import {
   assertValidJwtConfig,
+  assertValidJwtSecret,
+  INVALID_TOKEN_MESSAGE,
   JWT_ALGORITHM,
   MIN_JWT_SECRET_LENGTH,
   signAccessToken,
+  verifyAccessToken,
   type JwtConfig,
 } from "./jwt.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const TEST_JWT_SECRET = "test-jwt-secret-".repeat(3);
+const OTHER_JWT_SECRET = "other-jwt-secret-".repeat(3);
+const VALID_UUID = "11111111-1111-4111-8111-111111111111";
+
+function toBase64Url(value: unknown): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+}
 
 describe("jwt (signAccessToken HS256 y validación fail-closed)", () => {
   it("firma token Bearer JWT con header alg HS256, claims mínimos { id, role } y expiración exacta", () => {
@@ -141,6 +152,265 @@ describe("jwt (signAccessToken HS256 y validación fail-closed)", () => {
           invalidConfig,
         ),
       ).toThrow(RangeError);
+    },
+  );
+});
+
+describe("jwt (verifyAccessToken HS256 y validación fail-closed)", () => {
+  it("assertValidJwtSecret acepta secreto de exactamente 32 caracteres no blancos y rechaza menores con RangeError", () => {
+    // Arrange
+    const exact32Secret = "a".repeat(32);
+    const short31Secret = "a".repeat(31);
+
+    // Act & Assert
+    expect(() => assertValidJwtSecret(exact32Secret)).not.toThrow();
+    expect(() => assertValidJwtSecret(short31Secret)).toThrow(RangeError);
+  });
+
+  it.each(EXPECTED_MVP_ROLES)(
+    "verifica token HS256 para rol %s retornando Actor congelado con claves exactas { id, role }",
+    (role) => {
+      // Arrange
+      const token = signAccessToken(
+        { id: VALID_UUID, role },
+        { secret: TEST_JWT_SECRET, expiresIn: "1h" },
+      );
+
+      // Act
+      const actor = verifyAccessToken(token, TEST_JWT_SECRET);
+
+      // Assert
+      expect(Object.isFrozen(actor)).toBe(true);
+      expect(Object.keys(actor).sort()).toEqual(["id", "role"]);
+      expect(actor).toEqual({ id: VALID_UUID, role });
+    },
+  );
+
+  it("descarta claims extra del payload JWT retornando únicamente { id, role } congelado", () => {
+    // Arrange
+    const tokenWithExtraClaims = jwt.sign(
+      {
+        id: VALID_UUID,
+        role: "NUTRITIONIST",
+        email: "nutri@recetaria.com",
+        passwordHash: "hash-oculto",
+        isAdmin: true,
+      },
+      TEST_JWT_SECRET,
+      { algorithm: "HS256", expiresIn: "15m" },
+    );
+
+    // Act
+    const actor = verifyAccessToken(tokenWithExtraClaims, TEST_JWT_SECRET);
+
+    // Assert
+    expect(Object.isFrozen(actor)).toBe(true);
+    expect(Object.keys(actor).sort()).toEqual(["id", "role"]);
+    expect(actor).toEqual({ id: VALID_UUID, role: "NUTRITIONIST" });
+  });
+
+  it.each([
+    { label: "token vacío", buildToken: () => "" },
+    { label: "token con espacio", buildToken: () => "a.b.c extra" },
+    { label: "token con salto de línea", buildToken: () => "a.b.c\n" },
+    {
+      label: "token válido con sufijo CRLF",
+      buildToken: () =>
+        `${signAccessToken({ id: VALID_UUID, role: "USER" }, { secret: TEST_JWT_SECRET, expiresIn: "1h" })}\r\n`,
+    },
+    {
+      label: "token válido con espacio inicial",
+      buildToken: () =>
+        ` ${signAccessToken({ id: VALID_UUID, role: "USER" }, { secret: TEST_JWT_SECRET, expiresIn: "1h" })}`,
+    },
+    { label: "formato no-JWT", buildToken: () => "not-a-jwt" },
+    { label: "solo dos segmentos", buildToken: () => "a.b" },
+    {
+      label: "firma generada con otro secreto",
+      buildToken: () =>
+        signAccessToken({ id: VALID_UUID, role: "USER" }, { secret: OTHER_JWT_SECRET, expiresIn: "1h" }),
+    },
+    {
+      label: "payload manipulado USER -> ADMIN manteniendo firma",
+      buildToken: () => {
+        const userToken = signAccessToken(
+          { id: VALID_UUID, role: "USER" },
+          { secret: TEST_JWT_SECRET, expiresIn: "1h" },
+        );
+        const [headerSeg, , signatureSeg] = userToken.split(".");
+        return `${headerSeg ?? ""}.${toBase64Url({ id: VALID_UUID, role: "ADMIN" })}.${signatureSeg ?? ""}`;
+      },
+    },
+    {
+      label: "token expirado",
+      buildToken: () => {
+        const now = Math.floor(Date.now() / 1000);
+        return jwt.sign(
+          { id: VALID_UUID, role: "USER", iat: now - 120, exp: now - 10 },
+          TEST_JWT_SECRET,
+          { algorithm: "HS256" },
+        );
+      },
+    },
+    {
+      label: "token con nbf futuro",
+      buildToken: () => {
+        const now = Math.floor(Date.now() / 1000);
+        return jwt.sign(
+          { id: VALID_UUID, role: "USER", nbf: now + 60 },
+          TEST_JWT_SECRET,
+          { algorithm: "HS256", expiresIn: "1h" },
+        );
+      },
+    },
+  ])(
+    "rechaza con UnauthorizedError 401 genérico ante $label",
+    ({ buildToken }) => {
+      // Arrange
+      const candidateToken = buildToken();
+
+      // Act
+      let caughtError: unknown;
+      try {
+        verifyAccessToken(candidateToken, TEST_JWT_SECRET);
+      } catch (err: unknown) {
+        caughtError = err;
+      }
+
+      // Assert
+      expect(caughtError).toBeInstanceOf(UnauthorizedError);
+      if (caughtError instanceof UnauthorizedError) {
+        expect(caughtError.statusCode).toBe(401);
+        expect(caughtError.message).toBe(INVALID_TOKEN_MESSAGE);
+        expect(caughtError.errors).toBeUndefined();
+      }
+    },
+  );
+
+  it.each([
+    {
+      label: "alg: none",
+      buildTokenAndSecret: () => ({
+        token: `${toBase64Url({ alg: "none", typ: "JWT" })}.${toBase64Url({ id: VALID_UUID, role: "ADMIN" })}.`,
+        secret: TEST_JWT_SECRET,
+      }),
+    },
+    {
+      label: "alg: HS384",
+      buildTokenAndSecret: () => ({
+        token: jwt.sign({ id: VALID_UUID, role: "ADMIN" }, TEST_JWT_SECRET, {
+          algorithm: "HS384",
+          expiresIn: "1h",
+        }),
+        secret: TEST_JWT_SECRET,
+      }),
+    },
+    {
+      label: "alg: HS512",
+      buildTokenAndSecret: () => ({
+        token: jwt.sign({ id: VALID_UUID, role: "ADMIN" }, TEST_JWT_SECRET, {
+          algorithm: "HS512",
+          expiresIn: "1h",
+        }),
+        secret: TEST_JWT_SECRET,
+      }),
+    },
+    {
+      label: "alg: RS256 validado contra TEST_JWT_SECRET",
+      buildTokenAndSecret: () => {
+        const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+        return {
+          token: jwt.sign({ id: VALID_UUID, role: "ADMIN" }, privateKey, {
+            algorithm: "RS256",
+            expiresIn: "1h",
+          }),
+          secret: TEST_JWT_SECRET,
+        };
+      },
+    },
+    {
+      label: "alg: RS256 validado contra clave pública PEM (algorithm confusion)",
+      buildTokenAndSecret: () => {
+        const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+        const publicPem = publicKey.export({ type: "spki", format: "pem" }).toString();
+        return {
+          token: jwt.sign({ id: VALID_UUID, role: "ADMIN" }, privateKey, {
+            algorithm: "RS256",
+            expiresIn: "1h",
+          }),
+          secret: publicPem,
+        };
+      },
+    },
+  ])(
+    "rechaza algoritmos fuera de lista blanca ['HS256'] ($label) con UnauthorizedError 401",
+    ({ buildTokenAndSecret }) => {
+      // Arrange
+      const { token, secret } = buildTokenAndSecret();
+
+      // Act
+      let caughtError: unknown;
+      try {
+        verifyAccessToken(token, secret);
+      } catch (err: unknown) {
+        caughtError = err;
+      }
+
+      // Assert
+      expect(caughtError).toBeInstanceOf(UnauthorizedError);
+      if (caughtError instanceof UnauthorizedError) {
+        expect(caughtError.statusCode).toBe(401);
+        expect(caughtError.message).toBe(INVALID_TOKEN_MESSAGE);
+        expect(caughtError.errors).toBeUndefined();
+      }
+    },
+  );
+
+  it.each([
+    { label: "payload string plano", payload: "plain-text-payload" },
+    { label: "objeto vacío", payload: {} },
+    { label: "falta id", payload: { role: "USER" } },
+    { label: "id no UUID", payload: { id: "not-a-uuid", role: "USER" } },
+    { label: "falta role", payload: { id: VALID_UUID } },
+    { label: "role fuera de USER_ROLES", payload: { id: VALID_UUID, role: "SUPERADMIN" } },
+  ])(
+    "rechaza con UnauthorizedError 401 payloads inválidos ($label) aunque la firma HS256 sea válida",
+    ({ payload }) => {
+      // Arrange
+      const tokenWithBadPayload =
+        typeof payload === "string"
+          ? jwt.sign(payload, TEST_JWT_SECRET, { algorithm: "HS256" })
+          : jwt.sign(payload, TEST_JWT_SECRET, { algorithm: "HS256", expiresIn: "1h" });
+
+      // Act
+      let caughtError: unknown;
+      try {
+        verifyAccessToken(tokenWithBadPayload, TEST_JWT_SECRET);
+      } catch (err: unknown) {
+        caughtError = err;
+      }
+
+      // Assert
+      expect(caughtError).toBeInstanceOf(UnauthorizedError);
+      if (caughtError instanceof UnauthorizedError) {
+        expect(caughtError.statusCode).toBe(401);
+        expect(caughtError.message).toBe(INVALID_TOKEN_MESSAGE);
+        expect(caughtError.errors).toBeUndefined();
+      }
+    },
+  );
+
+  it.each(["", "a".repeat(31), " ".repeat(40)])(
+    "falla fail-closed con RangeError (no 401) si verifyAccessToken recibe secreto inválido (%j)",
+    (invalidSecret) => {
+      // Arrange
+      const validToken = signAccessToken(
+        { id: VALID_UUID, role: "USER" },
+        { secret: TEST_JWT_SECRET, expiresIn: "1h" },
+      );
+
+      // Act & Assert
+      expect(() => verifyAccessToken(validToken, invalidSecret)).toThrow(RangeError);
     },
   );
 });
