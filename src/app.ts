@@ -1,0 +1,76 @@
+import cors, { type CorsOptions } from "cors";
+import express, { type Express, type Router } from "express";
+import { createErrorHandlerMiddleware, type ErrorLogger } from "./middlewares/error-handler.middleware.js";
+import { createLoggerMiddleware, type LogWriter } from "./middlewares/logger.middleware.js";
+import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
+
+export const BODY_LIMIT = "100kb";
+export const API_V1_PREFIX = "/api/v1";
+
+const DEFAULT_CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"] as const;
+const DEFAULT_CORS_ALLOWED_HEADERS = ["Content-Type", "Authorization"] as const;
+
+function createDefaultCorsOptions(): CorsOptions {
+  return {
+    origin: "*",
+    methods: [...DEFAULT_CORS_METHODS],
+    allowedHeaders: [...DEFAULT_CORS_ALLOWED_HEADERS],
+    credentials: false,
+  };
+}
+
+export const DEFAULT_CORS_OPTIONS: Readonly<CorsOptions> = Object.freeze(createDefaultCorsOptions());
+
+export type MountedRouter = Readonly<{
+  path: string;
+  router: Router;
+}>;
+
+export type BuildAppOptions = Readonly<{
+  apiRouters?: readonly MountedRouter[] | undefined;
+  cors?: CorsOptions | undefined;
+  trustProxy?: boolean | number | string | undefined;
+  onLog?: LogWriter | undefined;
+  onError?: ErrorLogger | undefined;
+}>;
+
+/**
+ * Fábrica de la aplicación Express 5 (sin abrir puerto TCP / `listen()`).
+ * Configura endurecimiento HTTP, orden estricto de middlewares, parsers acotados,
+ * montaje bajo `/api/v1`, `notFoundMiddleware` y `errorHandlerMiddleware`.
+ */
+export function buildApp(options?: BuildAppOptions): Express {
+  const app = express();
+
+  app.disable("x-powered-by");
+  app.set("query parser", "simple");
+  app.set("trust proxy", options?.trustProxy ?? false);
+
+  // 1. Logging HTTP seguro
+  app.use(createLoggerMiddleware(options?.onLog));
+
+  // 2. CORS explícito (clona arreglos por instancia para evitar mutación compartida)
+  app.use(cors(options?.cors ?? createDefaultCorsOptions()));
+
+  // 3. Espacio reservado antes de parsers para /health y /health/ready (Spec 02.3)
+
+  // 4. Parsers con límite de tamaño (OWASP API4)
+  app.use(express.json({ limit: BODY_LIMIT }));
+  app.use(express.urlencoded({ extended: false, limit: BODY_LIMIT }));
+
+  // 5. Routers de negocio versionados bajo /api/v1
+  const apiV1Router = express.Router();
+  for (const mounted of options?.apiRouters ?? []) {
+    if (!mounted.path.startsWith("/")) {
+      throw new RangeError(`La ruta del router debe comenzar con '/': ${mounted.path}`);
+    }
+    apiV1Router.use(mounted.path, mounted.router);
+  }
+  app.use(API_V1_PREFIX, apiV1Router);
+
+  // 6. Manejo de rutas inexistentes (404) y traductor global de errores JSend
+  app.use(notFoundMiddleware);
+  app.use(createErrorHandlerMiddleware(options?.onError));
+
+  return app;
+}
