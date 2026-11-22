@@ -1,6 +1,11 @@
 import cors, { type CorsOptions } from "cors";
 import express, { type Express } from "express";
-import { buildApiRouters, isAppPrismaClient, type MountedRouter } from "./bootstrap/container.js";
+import {
+  buildApiRouters,
+  isAppPrismaClient,
+  type JwtConfig,
+  type MountedRouter,
+} from "./bootstrap/container.js";
 import type { AppPrismaClient } from "./infrastructure/database/prisma.js";
 import { createErrorHandlerMiddleware, type ErrorLogger } from "./middlewares/error-handler.middleware.js";
 import { createLoggerMiddleware, type LogWriter } from "./middlewares/logger.middleware.js";
@@ -29,6 +34,7 @@ export const DEFAULT_CORS_OPTIONS: Readonly<CorsOptions> = Object.freeze(createD
 export type BuildAppOptions = Readonly<{
   prisma?: AppPrismaClient | ReadinessDatabaseClient | undefined;
   readinessTimeoutMs?: number | undefined;
+  jwt?: JwtConfig | undefined;
   apiRouters?: readonly MountedRouter[] | undefined;
   cors?: CorsOptions | undefined;
   trustProxy?: boolean | number | string | undefined;
@@ -70,7 +76,9 @@ export function buildApp(options?: BuildAppOptions): Express {
   const apiV1Router = express.Router();
   const mountedRouters =
     options?.apiRouters ??
-    (isAppPrismaClient(options?.prisma) ? buildApiRouters(options.prisma) : []);
+    (isAppPrismaClient(options?.prisma)
+      ? buildApiRouters(options.prisma, { jwt: options?.jwt })
+      : []);
 
   for (const mounted of mountedRouters) {
     if (!mounted.path.startsWith("/")) {

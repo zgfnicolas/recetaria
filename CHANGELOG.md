@@ -33,6 +33,9 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Módulo `Auth` en 4 capas estrictas (`src/modules/auth/`: `auth.schema.ts`, `user.repository.ts`, `auth.service.ts`, `auth.controller.ts`, `auth.router.ts` e `index.ts`) habilitando `POST /api/v1/auth/register` con Zod 4 `z.strictObject` (prevención BOPLA, normalización de `email` y límite de `72` bytes UTF-8 para Bcrypt), cifrado Bcrypt `>= 10` rounds (`RN-08`), proyección sin `passwordHash` y mapeo de `P2002` a `409 Conflict`.
 - Composition root de routers de negocio en `src/bootstrap/container.ts` (`buildApiRouters`, `isAppPrismaClient`) con grafo acíclico consumiendo `src/modules/auth/index.ts`.
 - Pruebas unitarias y de integración HTTP de registro de usuarios (`src/modules/auth/auth.schema.test.ts` [25], `auth.service.test.ts` [11], `auth.controller.test.ts` [4] y `tests/integration/http/auth-register.test.ts` [12] contra PostgreSQL 15 en Docker: 52 pruebas nuevas).
+- Helper JWT `HS256` endurecido (`src/modules/auth/jwt.ts`: `JWT_ALGORITHM = "HS256"`, `assertValidJwtConfig`, `signAccessToken` con claims mínimos `{ id, role }`, validación *fail-closed* de secreto `>= 32` caracteres no blancos y duración `JwtExpiresIn`).
+- Endpoint `POST /api/v1/auth/login` en el módulo `Auth` en 4 capas (`loginSchema` `z.strictObject` con `emailFieldSchema` compartido en `auth.schema.ts`; `UserRepository.findAuthByEmail` con proyección acotada `USER_AUTH_SELECT` manteniendo `USER_PUBLIC_SELECT` en el resto de consultas; `AuthService.login` con defensa anti-enumeración `RN-08` mediante `DUMMY_BCRYPT_HASH` de costo 10, rechazo uniforme `401 Unauthorized` para email inexistente, contraseña incorrecta o `isActive === false` y prevención de bypass por truncado `> 72` bytes UTF-8 en Bcrypt; `AuthController.login` con `Cache-Control: no-store` y respuesta `200` en sobre JSend extendido).
+- Pruebas unitarias y de integración HTTP de inicio de sesión y JWT (`src/modules/auth/jwt.test.ts` [15], `src/modules/auth/auth.schema.test.ts` [+13, 38 totales], `src/modules/auth/auth.service.test.ts` [+11, 22 totales], `src/modules/auth/auth.controller.test.ts` [+4, 8 totales] y `tests/integration/http/auth-login.test.ts` [14] contra PostgreSQL 15 en Docker: 57 pruebas nuevas).
 - `docs/dependency-overrides.md` con el override de `effect` (GHSA-7589-6fvf-x4pw).
 
 ### Cambiado
@@ -49,6 +52,7 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - `src/infrastructure/database/prisma.ts`: `getDatabase(connectionString?: string)` acepta opcionalmente la URL validada por `loadEnv()` manteniendo compatibilidad con invocaciones sin argumentos.
 - `src/app.ts`: `BuildAppOptions` incorpora `prisma` (`ReadinessDatabaseClient`) y `readinessTimeoutMs`, montando las sondas de salud entre CORS y los body parsers.
 - `src/app.ts`: `BuildAppOptions.prisma` acepta `AppPrismaClient | ReadinessDatabaseClient` y monta automáticamente `/api/v1/auth` vía `buildApiRouters` cuando recibe el cliente Prisma completo sin sobreescribir `apiRouters`.
+- `src/bootstrap/container.ts`, `src/app.ts` y `src/server.ts`: propagación explícita y *fail-closed* de `jwt?: JwtConfig` (`JWT_SECRET` y `JWT_EXPIRES_IN` desde `loadEnv()`) manteniendo retrocompatibilidad con `buildApp({ prisma })`.
 
 ### Eliminado
 - Archivos redundantes en la raíz (`llm.txt`, `llms-full.txt`, `architecture.md`, `instructions.md`, `CLAUDE.local.md`, `.mcp.json`, `LICENSE.md`).
