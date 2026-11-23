@@ -61,6 +61,9 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Archivos redundantes en la raíz (`llm.txt`, `llms-full.txt`, `architecture.md`, `instructions.md`, `CLAUDE.local.md`, `.mcp.json`, `LICENSE.md`).
 - Documento duplicado `docs/srs.md` y carpetas obsoletas `.ai/`, `.claude/`, `.cursor/`, `.devin/`.
 
+### Corregido
+- Renombrado de `agents.md` a `AGENTS.md` para que el import `@AGENTS.md` de `CLAUDE.md`, el puntero de `.github/copilot-instructions.md` y los enlaces relativos de `.agents/skills/*` resuelvan en sistemas de archivos sensibles a mayúsculas (Linux, CI, contenedores).
+
 ## [0.1.0] - 2026-11-07
 
 ### Agregado
