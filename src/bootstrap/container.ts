@@ -9,6 +9,11 @@ import {
 } from "../modules/auth/index.js";
 import { createAuthMiddleware } from "../middlewares/auth.middleware.js";
 import {
+  createRateLimitMiddleware,
+  DEFAULT_PUBLIC_READ_RATE_LIMIT,
+  type RateLimitConfig,
+} from "../middlewares/rate-limit.middleware.js";
+import {
   createRecipeRouter,
   RecipeController,
   RecipeRepository,
@@ -25,6 +30,8 @@ export type MountedRouter = Readonly<{
 
 export type BuildApiRoutersOptions = Readonly<{
   jwt?: JwtConfig | undefined;
+  /** Rate limit del catálogo público; `false` lo desactiva (solo pruebas que no lo ejercitan). */
+  publicRateLimit?: RateLimitConfig | false | undefined;
 }>;
 
 /**
@@ -60,7 +67,10 @@ export function buildApiRouters(
   const recipeRepository = new RecipeRepository(prisma);
   const recipeService = new RecipeService(recipeRepository);
   const recipeController = new RecipeController(recipeService);
-  const recipeRouter = createRecipeRouter(recipeController, authGuard);
+  const publicRateLimit = options?.publicRateLimit ?? DEFAULT_PUBLIC_READ_RATE_LIMIT;
+  const publicReadLimiter =
+    publicRateLimit === false ? undefined : createRateLimitMiddleware(publicRateLimit);
+  const recipeRouter = createRecipeRouter(recipeController, authGuard, { publicReadLimiter });
 
   return [
     { path: "/auth", router: authRouter },

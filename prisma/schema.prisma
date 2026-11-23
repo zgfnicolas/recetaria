@@ -75,7 +75,11 @@ model Recipe {
   author     User  @relation("RecipeAuthor", fields: [authorId], references: [id], onDelete: Restrict, onUpdate: NoAction, map: "fk_recipes_author")
   reviewedBy User? @relation("RecipeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull, onUpdate: NoAction, map: "fk_recipes_reviewer")
 
-  @@index([authorId], map: "idx_recipes_authorid")
+  // Orden determinístico del catálogo y de /mine sin Sort de tabla completa (#36, medición en
+  // scripts/perf/explain-recipes-list.sql). El compuesto por autor reemplaza a idx_recipes_authorid
+  // (prefijo izquierdo: sirve también al chequeo de la FK ON DELETE RESTRICT).
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "idx_recipes_createdat_id")
+  @@index([authorId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_recipes_authorid_createdat_id")
   @@index([status, difficulty], map: "idx_recipes_status_difficulty")
   @@map("recipes")
 }

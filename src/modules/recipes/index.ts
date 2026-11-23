@@ -12,7 +12,7 @@ export {
   type RecipeListFilters,
   type RecipeRecord,
 } from "./recipe.repository.js";
-export { createRecipeRouter } from "./recipe.router.js";
+export { createRecipeRouter, type RecipeRouterOptions } from "./recipe.router.js";
 export {
   createRecipeSchema,
   DEFAULT_LIMIT,

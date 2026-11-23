@@ -1,6 +1,6 @@
 # Modelo de datos
 
-Fuente DDL operativa del esquema: [`prisma/schema.prisma`](../prisma/schema.prisma) (Prisma 7) junto con las migraciones SQL versionadas de Prisma (`20261121201424_init`). El archivo [`database_schema_init.sql`](../database_schema_init.sql) se conserva como referencia inicial histórica (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y usuarios semilla de referencia para los 4 roles RBAC.
+Fuente DDL operativa del esquema: [`prisma/schema.prisma`](../prisma/schema.prisma) (Prisma 7) junto con las migraciones SQL versionadas de Prisma (`20261121201424_init` y `20261123145000_recipes_list_order_indexes`). El archivo [`database_schema_init.sql`](../database_schema_init.sql) se conserva como referencia inicial histórica (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y usuarios semilla de referencia para los 4 roles RBAC.
 
 ## Diagrama ER
 ```mermaid
@@ -114,7 +114,7 @@ Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO
 
 ### Índices, restricciones CHECK, triggers y datos semilla
 - **Extensión y catálogo:** la migración inicial `20261121201424_init` habilita `pgcrypto` (`gen_random_uuid()`) y registra `COMMENT ON COLUMN "audit_logs"."entityId"` documentando la ausencia intencional de FK hacia `recipes` (`RN-06`).
-- **Índices B-Tree:** `idx_users_role_isactive`, `idx_recipes_authorid`, `idx_recipes_status_difficulty`, `idx_audit_logs_entity`, `idx_audit_logs_createdat`, `idx_audit_logs_userid`, más los índices únicos implícitos de `UNIQUE(email)` y `UNIQUE(slug)`. Sin índices redundantes sobre `email`/`slug` ni `ON UPDATE CASCADE` (`ADR-0006`).
+- **Índices B-Tree:** `idx_users_role_isactive`, `idx_recipes_createdat_id` (`"createdAt" DESC, id DESC`), `idx_recipes_authorid_createdat_id` (`"authorId", "createdAt" DESC, id DESC`), `idx_recipes_status_difficulty`, `idx_audit_logs_entity`, `idx_audit_logs_createdat`, `idx_audit_logs_userid`, más los índices únicos implícitos de `UNIQUE(email)` y `UNIQUE(slug)`. Sin índices redundantes sobre `email`/`slug` ni `ON UPDATE CASCADE` (`ADR-0006`). Los dos índices de orden (migración `20261123145000_recipes_list_order_indexes`, #36) resuelven `GET /api/v1/recipes` y `/mine` sin *Sort* de tabla completa; el compuesto por autor reemplazó a `idx_recipes_authorid` y respalda también la FK `fk_recipes_author` (`ON DELETE RESTRICT`). Medición reproducible en [`scripts/perf/explain-recipes-list.sql`](../scripts/perf/explain-recipes-list.sql).
 - **Restricciones `CHECK` en `recipes`:**
   - `chk_prep_time_positive`: `CHECK ("prepTimeMinutes" > 0 AND "prepTimeMinutes" <= 1440)` (`RN-07`).
   - `chk_recipes_reviewer_not_author`: `CHECK ("reviewedById" IS NULL OR "reviewedById" <> "authorId")` (`RN-05`).
