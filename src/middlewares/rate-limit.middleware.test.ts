@@ -123,3 +123,162 @@ describe("createRateLimitMiddleware (#36, OWASP API4)", () => {
     expect(() => createRateLimitMiddleware(config)).toThrow(RangeError);
   });
 });
+
+describe("createRateLimitMiddleware — opciones de #39 (countOnlyFailures, key, message)", () => {
+  function createFlexibleHarness(
+    config: RateLimitConfig,
+    key?: (req: express.Request) => string | undefined,
+  ): { readonly app: express.Express; readonly handlerCalls: () => number } {
+    let calls = 0;
+    const app = express();
+    app.get(
+      "/attempt",
+      createRateLimitMiddleware(config, key === undefined ? undefined : { key }),
+      (req, res) => {
+        calls += 1;
+        res.status(req.query["fail"] === "1" ? 401 : 200).json({ ok: true });
+      },
+    );
+    app.use(createErrorHandlerMiddleware(() => undefined));
+    return { app, handlerCalls: () => calls };
+  }
+
+  it("con countOnlyFailures los éxitos no consumen cuota y los fallos sí", async () => {
+    // Arrange
+    const { app } = createFlexibleHarness({ windowMs: 60_000, limit: 2, countOnlyFailures: true });
+
+    // Act: secuencial, porque el descuento de los éxitos ocurre al terminar cada respuesta
+    const successes: number[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      successes.push((await request(app).get("/attempt")).status);
+    }
+    const failures = [
+      (await request(app).get("/attempt?fail=1")).status,
+      (await request(app).get("/attempt?fail=1")).status,
+    ];
+    const blockedSuccess = await request(app).get("/attempt");
+
+    // Assert
+    expect(successes).toEqual([200, 200, 200, 200, 200]);
+    expect(failures).toEqual([401, 401]);
+    expect(blockedSuccess.status).toBe(429);
+  });
+
+  it("sin countOnlyFailures cuenta todas las solicitudes (comportamiento previo)", async () => {
+    // Arrange
+    const { app } = createFlexibleHarness({ windowMs: 60_000, limit: 2 });
+
+    // Act
+    const statuses = [
+      (await request(app).get("/attempt")).status,
+      (await request(app).get("/attempt")).status,
+      (await request(app).get("/attempt")).status,
+    ];
+
+    // Assert
+    expect(statuses).toEqual([200, 200, 429]);
+  });
+
+  it("con key personalizada lleva contadores por clave e ignora la IP", async () => {
+    // Arrange
+    const { app } = createFlexibleHarness({ windowMs: 60_000, limit: 1 }, (req) =>
+      req.header("x-account"),
+    );
+
+    // Act
+    const first = await request(app).get("/attempt").set("x-account", "a");
+    const sameKey = await request(app).get("/attempt").set("x-account", "a");
+    const otherKey = await request(app).get("/attempt").set("x-account", "b");
+
+    // Assert
+    expect([first.status, sameKey.status, otherKey.status]).toEqual([200, 429, 200]);
+  });
+
+  it("si key devuelve undefined el limitador no aplica (sin headers ni 429)", async () => {
+    // Arrange
+    const { app, handlerCalls } = createFlexibleHarness({ windowMs: 60_000, limit: 1 }, () => undefined);
+
+    // Act
+    const responses = [await request(app).get("/attempt"), await request(app).get("/attempt")];
+
+    // Assert
+    expect(responses.map((res) => res.status)).toEqual([200, 200]);
+    expect(responses[0]?.headers["ratelimit"]).toBeUndefined();
+    expect(handlerCalls()).toBe(2);
+  });
+
+  function createChain(ignoreRateLimitedResponses: boolean): express.Express {
+    // Limitador "externo" (cuota 2, solo fallos) delante de uno "interno" (cuota 1) que se puede
+    // saltear con ?bypass=1 para observar si el externo todavía deja pasar.
+    const app = express();
+    app.get(
+      "/chain",
+      createRateLimitMiddleware({
+        windowMs: 60_000,
+        limit: 2,
+        countOnlyFailures: true,
+        ignoreRateLimitedResponses,
+      }),
+      createRateLimitMiddleware({ windowMs: 60_000, limit: 1 }, {
+        key: (req) => (req.query["bypass"] === "1" ? undefined : "fija"),
+      }),
+      (_req, res) => {
+        res.status(401).json({ ok: false });
+      },
+    );
+    app.use(createErrorHandlerMiddleware(() => undefined));
+    return app;
+  }
+
+  it.each([
+    [true, 401],
+    [false, 429],
+  ])(
+    "con ignoreRateLimitedResponses=%s los 429 de un limitador posterior %s consumen la cuota del externo",
+    async (ignore, expectedAfterBypass) => {
+      // Arrange: 1 fallo real (401) y 4 bloqueos del limitador interno (429)
+      const app = createChain(ignore);
+      const statuses: number[] = [];
+      for (let i = 0; i < 5; i += 1) {
+        statuses.push((await request(app).get("/chain")).status);
+      }
+
+      // Act: el interno ya no aplica; solo decide el externo
+      const afterBypass = await request(app).get("/chain?bypass=1");
+
+      // Assert: ignorando los 429 el externo solo contó 1 fallo y deja pasar (401 del handler)
+      expect(statuses).toEqual([401, 429, 429, 429, 429]);
+      expect(afterBypass.status).toBe(expectedAfterBypass);
+    },
+  );
+
+  it("con exposeHeaders: false no emite RateLimit, RateLimit-Policy ni Retry-After (tampoco en el 429)", async () => {
+    // Arrange
+    const { app } = createFlexibleHarness({ windowMs: 60_000, limit: 1, exposeHeaders: false });
+
+    // Act
+    const allowed = await request(app).get("/attempt");
+    const blocked = await request(app).get("/attempt");
+
+    // Assert
+    expect(blocked.status).toBe(429);
+    for (const res of [allowed, blocked]) {
+      expect(res.headers["ratelimit"]).toBeUndefined();
+      expect(res.headers["ratelimit-policy"]).toBeUndefined();
+      expect(res.headers["retry-after"]).toBeUndefined();
+    }
+  });
+
+  it("usa el message configurado en el 429 JSend", async () => {
+    // Arrange
+    const { app } = createFlexibleHarness({ windowMs: 60_000, limit: 1, message: "Mensaje propio" });
+    await request(app).get("/attempt");
+
+    // Act
+    const res = await request(app).get("/attempt");
+
+    // Assert
+    expect(res.status).toBe(429);
+    expect(res.body).toEqual({ success: false, statusCode: 429, message: "Mensaje propio", errors: [] });
+  });
+});

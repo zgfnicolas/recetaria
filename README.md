@@ -63,8 +63,8 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 |---|---|---|---|---|
 | `GET` | `/health` | Público | Liveness liviano del proceso (sin consulta a DB; usado por Docker `HEALTHCHECK`) | `200` |
 | `GET` | `/health/ready` | Público | Readiness verificando conectividad a PostgreSQL (`SELECT 1`) | `200`, `503` |
-| `POST` | `/api/v1/auth/register` | Público | Registra usuario con Bcrypt (`>= 10` rounds); acepta `role` opcional en MVP (`USER` por defecto) | `201`, `400`, `409` |
-| `POST` | `/api/v1/auth/login` | Público | Autentica credenciales y devuelve Bearer JWT (`{ id, role }`); rechaza `isActive = false` | `200`, `400`, `401` |
+| `POST` | `/api/v1/auth/register` | Público | Registra usuario con Bcrypt (`>= 10` rounds); acepta `role` opcional en MVP (`USER` por defecto); rate limit de 5 registros por hora por IP | `201`, `400`, `409`, `429` |
+| `POST` | `/api/v1/auth/login` | Público | Autentica credenciales y devuelve Bearer JWT (`{ id, role }`); rechaza `isActive = false`; rate limit contra fuerza bruta de 10 intentos fallidos por IP y 20 por cuenta cada 15 min (los exitosos no cuentan) | `200`, `400`, `401`, `429` |
 | `GET` | `/api/v1/recipes` | Público | Lista recetas paginadas (`?status=&difficulty=&authorId=&page=1&limit=20`, `limit` máx. `100`, `page × limit` ≤ `10000`) ordenadas por `createdAt DESC, id DESC`; rate limit de 120 req/min por IP (headers `RateLimit`, `RateLimit-Policy` y `Retry-After`) | `200`, `400`, `429` |
 | `GET` | `/api/v1/recipes/mine` | Autenticado (JWT) | Lista paginada exclusivamente de las recetas creadas por el usuario autenticado (`authorId === req.user.id`) | `200`, `400`, `401` |
 | `GET` | `/api/v1/recipes/:id` | Público | Obtiene el detalle de una receta por UUID | `200`, `400`, `404` |
