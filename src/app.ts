@@ -3,6 +3,7 @@ import express, { type Express } from "express";
 import {
   buildApiRouters,
   isAppPrismaClient,
+  type AuthRateLimitOptions,
   type JwtConfig,
   type MountedRouter,
 } from "./bootstrap/container.js";
@@ -42,6 +43,8 @@ export type BuildAppOptions = Readonly<{
   jwt?: JwtConfig | undefined;
   /** Rate limit del catálogo público (default 120 req/min por IP); `false` lo desactiva. */
   publicRateLimit?: RateLimitConfig | false | undefined;
+  /** Rate limits de `/api/v1/auth` (login por IP y por cuenta, registro); `false` los desactiva. */
+  authRateLimit?: AuthRateLimitOptions | false | undefined;
   apiRouters?: readonly MountedRouter[] | undefined;
   cors?: CorsOptions | undefined;
   trustProxy?: boolean | number | string | undefined;
@@ -87,6 +90,7 @@ export function buildApp(options?: BuildAppOptions): Express {
       ? buildApiRouters(options.prisma, {
           jwt: options?.jwt,
           publicRateLimit: options?.publicRateLimit,
+          authRateLimit: options?.authRateLimit,
         })
       : []);
 

@@ -133,7 +133,9 @@ describe("Rate limit del catálogo público GET /api/v1/recipes (#36, OWASP API4
     expect(create.status).toBe(401);
     expect(create.headers["ratelimit"]).toBeUndefined();
     expect(login.status).toBe(401);
-    expect(login.headers["ratelimit"]).toBeUndefined();
+    // /auth tiene sus propias políticas (#39), nunca la cuota del catálogo
+    expect(String(login.headers["ratelimit-policy"])).toContain("auth-login-ip");
+    expect(String(login.headers["ratelimit-policy"])).not.toContain("recipes-public-read");
     expect(health.status).toBe(200);
     expect(blocked.status).toBe(429);
   });

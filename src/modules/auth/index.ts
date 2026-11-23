@@ -1,5 +1,12 @@
 export { AuthController } from "./auth.controller.js";
-export { createAuthRouter } from "./auth.router.js";
+export {
+  AUTH_RATE_LIMIT_EXCEEDED_MESSAGE,
+  DEFAULT_AUTH_LOGIN_ACCOUNT_RATE_LIMIT,
+  DEFAULT_AUTH_LOGIN_IP_RATE_LIMIT,
+  DEFAULT_AUTH_REGISTER_RATE_LIMIT,
+  loginAccountRateLimitKey,
+} from "./auth.rate-limit.js";
+export { createAuthRouter, type AuthRouterOptions } from "./auth.router.js";
 export {
   loginSchema,
   MAX_BCRYPT_PASSWORD_BYTES,
