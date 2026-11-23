@@ -83,13 +83,13 @@ Entidad principal con el contenido, metadatos nutricionales y estado de validaci
 | `id` | `UUID` | No | Identificador único (`PK`, `gen_random_uuid()`) |
 | `title` | `VARCHAR(150)` | No | Título de la receta |
 | `slug` | `VARCHAR(200)` | No | Identificador legible autogenerado (`UNIQUE`) |
-| `description` | `TEXT` | No | Descripción e instrucciones del plato |
+| `description` | `TEXT` | No | Descripción e instrucciones del plato (10..5000 caracteres en Zod) |
 | `difficulty` | `Difficulty` | No | Complejidad, por defecto `'MEDIUM'` |
 | `status` | `RecipeStatus` | No | Estado de validación (`DRAFT` o `APPROVED`), por defecto `'DRAFT'` |
 | `prepTimeMinutes` | `SMALLINT` | No | Tiempo en minutos (`CHECK ("prepTimeMinutes" > 0 AND "prepTimeMinutes" <= 1440)`) |
 | `tags` | `VARCHAR(50)[]` | No | Etiquetas dietarias (máx. 20 ítems de ≤ 50 caracteres en Zod), por defecto `'{}'` |
-| `ingredients` | `JSONB` | No | Lista estructurada de ingredientes (`name`, `quantity`, `unit`), con `CHECK (jsonb_typeof("ingredients") = 'array')` |
-| `nutritionalInfo` | `JSONB` | Sí | Objeto nutricional opcional tipado (`calories`, `proteinGrams`, `carbsGrams`, `fatGrams`, `fiberGrams`, `servings`), con `CHECK ("nutritionalInfo" IS NULL OR jsonb_typeof("nutritionalInfo") = 'object')` |
+| `ingredients` | `JSONB` | No | Lista estructurada de ingredientes (`name`, `quantity`, `unit`; 1..100 ítems y `quantity ≤ 100000` en Zod, `quantity > 0` en `RN-07`), con `CHECK (jsonb_typeof("ingredients") = 'array')` |
+| `nutritionalInfo` | `JSONB` | Sí | Objeto nutricional opcional tipado (`calories`, `proteinGrams`, `carbsGrams`, `fatGrams`, `fiberGrams` en `[0, 100000]` y `servings` entero `> 0`), con `CHECK ("nutritionalInfo" IS NULL OR jsonb_typeof("nutritionalInfo") = 'object')` |
 | `coverImageUrl` | `VARCHAR(512)` | Sí | URL de portada |
 | `videoUrl` | `VARCHAR(512)` | Sí | URL de video corto |
 | `authorId` | `UUID (FK)` | No | Autor que creó la receta (`-> users.id`) |

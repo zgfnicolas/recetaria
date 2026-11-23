@@ -7,6 +7,13 @@ import {
   UserRepository,
   type JwtConfig,
 } from "../modules/auth/index.js";
+import { createAuthMiddleware } from "../middlewares/auth.middleware.js";
+import {
+  createRecipeRouter,
+  RecipeController,
+  RecipeRepository,
+  RecipeService,
+} from "../modules/recipes/index.js";
 import type { ReadinessDatabaseClient } from "../shared/http/health.router.js";
 
 export type { JwtConfig } from "../modules/auth/index.js";
@@ -47,5 +54,16 @@ export function buildApiRouters(
   const authController = new AuthController(authService);
   const authRouter = createAuthRouter(authController);
 
-  return [{ path: "/auth", router: authRouter }];
+  // Guarda JWT con DI explícita: sin `jwt` falla cerrado (500 redactado) en cada request protegida.
+  const authGuard = createAuthMiddleware({ secret: options?.jwt?.secret });
+
+  const recipeRepository = new RecipeRepository(prisma);
+  const recipeService = new RecipeService(recipeRepository);
+  const recipeController = new RecipeController(recipeService);
+  const recipeRouter = createRecipeRouter(recipeController, authGuard);
+
+  return [
+    { path: "/auth", router: authRouter },
+    { path: "/recipes", router: recipeRouter },
+  ];
 }
