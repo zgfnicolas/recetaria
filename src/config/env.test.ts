@@ -1,5 +1,13 @@
+import express from "express";
 import { describe, expect, it, vi } from "vitest";
-import { loadEnv, parseEnv, type EnvSource, type NodeEnv } from "./env.js";
+import {
+  describeTrustProxy,
+  loadEnv,
+  MAX_TRUST_PROXY_HOPS,
+  parseEnv,
+  type EnvSource,
+  type NodeEnv,
+} from "./env.js";
 
 const VALID_POSTGRES_URL = "postgresql://recetaria:devpass@localhost:5433/recetaria";
 const VALID_JWT_SECRET = "s".repeat(32);
@@ -27,6 +35,7 @@ describe("parseEnv (validación fail-fast con Zod 4)", () => {
       DATABASE_URL: VALID_POSTGRES_URL,
       JWT_SECRET: VALID_JWT_SECRET,
       JWT_EXPIRES_IN: "1d",
+      TRUST_PROXY: 0,
     });
     expect(Object.isFrozen(env)).toBe(true);
     expect(Reflect.set(env, "PORT", 4000)).toBe(false);
@@ -226,6 +235,161 @@ describe("parseEnv (validación fail-fast con Zod 4)", () => {
   });
 });
 
+describe("parseEnv — TRUST_PROXY (#38)", () => {
+  function captureEnvError(trustProxy: string): string {
+    try {
+      parseEnv(createValidSource({ TRUST_PROXY: trustProxy }));
+    } catch (err: unknown) {
+      return err instanceof Error ? err.message : String(err);
+    }
+    throw new Error(`Se esperaba que TRUST_PROXY=${JSON.stringify(trustProxy)} fuera rechazado`);
+  }
+
+  it.each([undefined, "", "   ", "0"])(
+    "interpreta %j como 0 (no confiar en X-Forwarded-For, comportamiento previo)",
+    (value) => {
+      // Act
+      const env = parseEnv(createValidSource({ TRUST_PROXY: value }));
+
+      // Assert
+      expect(env.TRUST_PROXY).toBe(0);
+    },
+  );
+
+  it.each([
+    ["1", 1],
+    [" 2 ", 2],
+    [String(MAX_TRUST_PROXY_HOPS), MAX_TRUST_PROXY_HOPS],
+  ])("acepta el número de saltos %j como %d", (value, expected) => {
+    expect(parseEnv(createValidSource({ TRUST_PROXY: value })).TRUST_PROXY).toBe(expected);
+  });
+
+  const ACCEPTED_TRUST_PROXY_LISTS = [
+    ["10.0.0.1", "10.0.0.1"],
+    [" 10.0.0.0/8 , loopback ", "10.0.0.0/8,loopback"],
+    ["172.16.0.0/12,192.168.0.0/16", "172.16.0.0/12,192.168.0.0/16"],
+    ["::1,fd00::/16,2001:db8::/32", "::1,fd00::/16,2001:db8::/32"],
+    ["loopback,linklocal,uniquelocal", "loopback,linklocal,uniquelocal"],
+    ["10.0.0.0/32", "10.0.0.0/32"],
+    ["10.0.0.0/08", "10.0.0.0/08"],
+    ["fe80::1%eth0", "fe80::1%eth0"],
+    ["::ffff:10.0.0.0/104", "::ffff:10.0.0.0/104"],
+  ] as const;
+
+  it.each(ACCEPTED_TRUST_PROXY_LISTS)(
+    "acepta la lista de confianza %j normalizada como %j",
+    (value, expected) => {
+      expect(parseEnv(createValidSource({ TRUST_PROXY: value })).TRUST_PROXY).toBe(expected);
+    },
+  );
+
+  it.each([
+    ...ACCEPTED_TRUST_PROXY_LISTS.map(([value]) => value),
+    "",
+    "1",
+    String(MAX_TRUST_PROXY_HOPS),
+  ])("todo valor aceptado (%j) también lo acepta Express en trust proxy sin lanzar", (value) => {
+    // Arrange
+    const setting = parseEnv(createValidSource({ TRUST_PROXY: value })).TRUST_PROXY;
+    const app = express();
+
+    // Act / Assert
+    expect(() => app.set("trust proxy", setting)).not.toThrow();
+  });
+
+  it.each(["true", "TRUE", " True ", "false", "FALSE"])(
+    "rechaza %j explicando que true permite falsificar X-Forwarded-For",
+    (value) => {
+      // Act
+      const message = captureEnvError(value);
+
+      // Assert
+      expect(message).toContain("TRUST_PROXY no admite true/false");
+      expect(message).toContain("falsificar X-Forwarded-For");
+    },
+  );
+
+  it.each([
+    "0.0.0.0/0",
+    "::/0",
+    "10.0.0.1,0.0.0.0/00",
+    "loopback, ::/0",
+    "0.0.0.0/1",
+    "0.0.0.0/1,128.0.0.0/1",
+    "10.0.0.0/7",
+    "::ffff:0:0/96",
+    "::ffff:0.0.0.0/96",
+    "0:0:0:0:0:ffff:0:0/96",
+    "::ffff:10.0.0.0/103",
+    "2000::/15",
+    "fd00::/8",
+  ])("rechaza el rango demasiado amplio %j (equivalente en la práctica a true)", (value) => {
+    expect(captureEnvError(value)).toContain(
+      "TRUST_PROXY no admite rangos más amplios que /8 en IPv4 ni /16 en IPv6",
+    );
+  });
+
+  it.each(["11", "99"])("rechaza %j por superar el máximo de saltos", (value) => {
+    expect(captureEnvError(value)).toContain(
+      `TRUST_PROXY admite como máximo ${String(MAX_TRUST_PROXY_HOPS)} saltos de proxy`,
+    );
+  });
+
+  it.each([
+    "-1",
+    "1.5",
+    "1e1",
+    "abc",
+    "999.1.1.1",
+    "10.0.0",
+    "10.0.0.0/33",
+    "10.0.0.0/-1",
+    "10.0.0.0/",
+    "10.0.0.0/8/1",
+    "10.0.0.0/255.0.0.0",
+    "::1/129",
+    "gggg::1",
+    "localhost",
+    "loopback,,10.0.0.1",
+    "10.0.0.1,",
+    "Loopback",
+  ])("rechaza el valor inválido %j con mensaje de formatos válidos", (value) => {
+    // Act
+    const message = captureEnvError(value);
+
+    // Assert
+    expect(message).toContain("TRUST_PROXY debe ser un número de saltos (0-10)");
+    expect(message).toContain("loopback, linklocal, uniquelocal");
+  });
+
+  it("no expone secretos del entorno cuando TRUST_PROXY es inválido", () => {
+    // Arrange
+    const secretMarker = "JWT_SECRET_MARKER_".repeat(3);
+
+    // Act
+    let message = "";
+    try {
+      parseEnv({ DATABASE_URL: VALID_POSTGRES_URL, JWT_SECRET: secretMarker, TRUST_PROXY: "true" });
+    } catch (err: unknown) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+
+    // Assert
+    expect(message).toContain("TRUST_PROXY");
+    expect(message).not.toContain(secretMarker);
+    expect(message).not.toContain("devpass");
+  });
+
+  it.each([
+    [0, "desactivado (se ignora X-Forwarded-For)"],
+    [1, "1 salto de proxy"],
+    [3, "3 saltos de proxy"],
+    ["10.0.0.0/8,loopback", "direcciones de confianza 10.0.0.0/8,loopback"],
+  ])("describeTrustProxy(%j) = %j para el log de arranque", (setting, expected) => {
+    expect(describeTrustProxy(setting)).toBe(expected);
+  });
+});
+
 describe("loadEnv", () => {
   it("lee y valida process.env con loadDotenv=false devolviendo un objeto congelado", () => {
     // Arrange
@@ -234,6 +398,7 @@ describe("loadEnv", () => {
     vi.stubEnv("DATABASE_URL", VALID_POSTGRES_URL);
     vi.stubEnv("JWT_SECRET", VALID_JWT_SECRET);
     vi.stubEnv("JWT_EXPIRES_IN", "2h");
+    vi.stubEnv("TRUST_PROXY", "");
 
     // Act
     const env = loadEnv({ loadDotenv: false });
@@ -245,6 +410,7 @@ describe("loadEnv", () => {
       DATABASE_URL: VALID_POSTGRES_URL,
       JWT_SECRET: VALID_JWT_SECRET,
       JWT_EXPIRES_IN: "2h",
+      TRUST_PROXY: 0,
     });
     expect(Object.isFrozen(env)).toBe(true);
   });
@@ -256,6 +422,7 @@ describe("loadEnv", () => {
     vi.stubEnv("DATABASE_URL", VALID_POSTGRES_URL);
     vi.stubEnv("JWT_SECRET", VALID_JWT_SECRET);
     vi.stubEnv("JWT_EXPIRES_IN", "1d");
+    vi.stubEnv("TRUST_PROXY", "");
 
     // Act
     const env = loadEnv();
@@ -267,6 +434,7 @@ describe("loadEnv", () => {
       DATABASE_URL: VALID_POSTGRES_URL,
       JWT_SECRET: VALID_JWT_SECRET,
       JWT_EXPIRES_IN: "1d",
+      TRUST_PROXY: 0,
     });
     expect(Object.isFrozen(env)).toBe(true);
   });

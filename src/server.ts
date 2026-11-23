@@ -2,7 +2,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildApp } from "./app.js";
-import { loadEnv, type Env } from "./config/env.js";
+import { describeTrustProxy, loadEnv, type Env } from "./config/env.js";
 import { disconnect, getDatabase } from "./infrastructure/database/prisma.js";
 import type { ErrorLogger } from "./middlewares/error-handler.middleware.js";
 import type { LogWriter } from "./middlewares/logger.middleware.js";
@@ -233,6 +233,7 @@ export function startServer(options?: StartServerOptions): RunningServer {
       secret: env.JWT_SECRET,
       expiresIn: env.JWT_EXPIRES_IN,
     },
+    trustProxy: env.TRUST_PROXY,
     onLog,
     onError,
   });
@@ -289,6 +290,7 @@ export function startServer(options?: StartServerOptions): RunningServer {
     const address = server.address();
     const boundPort = typeof address === "object" && address !== null ? address.port : port;
     onLog(`[SERVER] Recetaria API escuchando en puerto ${String(boundPort)} (${env.NODE_ENV})`);
+    onLog(`[SERVER] trust proxy: ${describeTrustProxy(env.TRUST_PROXY)}`);
   });
 
   return { server, shutdown, disposeListeners };

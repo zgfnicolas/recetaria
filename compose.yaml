@@ -23,6 +23,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-recetaria}?schema=public
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      # Saltos de proxy o lista de IPs/CIDR de confianza (ver README); 0 = no confiar en X-Forwarded-For
+      TRUST_PROXY: ${TRUST_PROXY:-0}
     networks:
       - application
       - data

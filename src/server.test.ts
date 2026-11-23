@@ -19,6 +19,7 @@ const TEST_ENV: Env = Object.freeze({
   DATABASE_URL: "postgresql://recetaria:devpass@localhost:5433/recetaria",
   JWT_SECRET: "s".repeat(32),
   JWT_EXPIRES_IN: "1d",
+  TRUST_PROXY: 0,
 });
 
 function createDeferred<T>(): {
