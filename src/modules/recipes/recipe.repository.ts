@@ -45,9 +45,35 @@ export type CreateRecipeRecordInput = Readonly<{
   authorId: string;
 }>;
 
+/** Filtros opcionales combinables del catálogo (`HU-04`). */
+export type RecipeListFilters = Readonly<{
+  status?: RecipeStatus | undefined;
+  difficulty?: RecipeDifficulty | undefined;
+  authorId?: string | undefined;
+}>;
+
+export type FindManyPaginatedParams = Readonly<{
+  filters: RecipeListFilters;
+  page: number;
+  limit: number;
+}>;
+
+export type PaginationMeta = Readonly<{
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}>;
+
+export type PaginatedRecipes = Readonly<{
+  items: readonly RecipeRecord[];
+  meta: PaginationMeta;
+}>;
+
 export interface IRecipeRepository {
   create(data: CreateRecipeRecordInput): Promise<RecipeRecord>;
   findBySlug(slug: string): Promise<RecipeRecord | null>;
+  findManyPaginated(params: FindManyPaginatedParams): Promise<PaginatedRecipes>;
 }
 
 export const RECIPE_SLUG_CONFLICT_MESSAGE = "Ya existe una receta con ese slug";
@@ -74,6 +100,31 @@ const RECIPE_PUBLIC_SELECT = {
 } as const satisfies Prisma.RecipeSelect;
 
 type RecipeRow = Prisma.RecipeGetPayload<{ select: typeof RECIPE_PUBLIC_SELECT }>;
+
+/** Orden determinístico: `id` desempata recetas con el mismo `createdAt` (sin duplicados ni saltos). */
+const RECIPE_LIST_ORDER_BY = [
+  { createdAt: "desc" },
+  { id: "desc" },
+] as const satisfies Prisma.RecipeOrderByWithRelationInput[];
+
+/** Construye el `where` de Prisma solo con los filtros definidos (nunca filtra en memoria). */
+function buildRecipeListWhere(filters: RecipeListFilters): Prisma.RecipeWhereInput {
+  const where: Prisma.RecipeWhereInput = {};
+  if (filters.status !== undefined) {
+    where.status = filters.status;
+  }
+  if (filters.difficulty !== undefined) {
+    where.difficulty = filters.difficulty;
+  }
+  if (filters.authorId !== undefined) {
+    where.authorId = filters.authorId;
+  }
+  return where;
+}
+
+export function calculateTotalPages(total: number, limit: number): number {
+  return total === 0 ? 0 : Math.ceil(total / limit);
+}
 
 /** Lectura defensiva de columnas JSONB (tolerante a claves extra, estricta en tipos). */
 const storedIngredientsSchema = z.array(
@@ -175,6 +226,30 @@ export class RecipeRepository implements IRecipeRepository {
       select: RECIPE_PUBLIC_SELECT,
     });
     return row === null ? null : toRecipeRecord(row);
+  }
+
+  async findManyPaginated(params: FindManyPaginatedParams): Promise<PaginatedRecipes> {
+    const { page, limit } = params;
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1) {
+      throw new RangeError("page y limit deben ser enteros >= 1");
+    }
+
+    const where = buildRecipeListWhere(params.filters);
+    const [total, rows] = await this.#prisma.$transaction([
+      this.#prisma.recipe.count({ where }),
+      this.#prisma.recipe.findMany({
+        where,
+        orderBy: [...RECIPE_LIST_ORDER_BY],
+        skip: (page - 1) * limit,
+        take: limit,
+        select: RECIPE_PUBLIC_SELECT,
+      }),
+    ]);
+
+    return {
+      items: rows.map(toRecipeRecord),
+      meta: { page, limit, total, totalPages: calculateTotalPages(total, limit) },
+    };
   }
 }
 

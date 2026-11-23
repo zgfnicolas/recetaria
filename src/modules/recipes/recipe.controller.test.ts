@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Actor } from "../auth/index.js";
 import { BadRequestError, ConflictError, UnauthorizedError } from "../../shared/errors/app-error.js";
 import { RecipeController } from "./recipe.controller.js";
-import type { RecipeRecord } from "./recipe.repository.js";
-import type { CreateRecipeDTO } from "./recipe.schema.js";
+import type { PaginatedRecipes, RecipeRecord } from "./recipe.repository.js";
+import type { CreateRecipeDTO, ListRecipesQueryDTO } from "./recipe.schema.js";
 import type { IRecipeService } from "./recipe.service.js";
 
 const ACTOR: Actor = Object.freeze({ id: "11111111-1111-4111-8111-111111111111", role: "USER" });
@@ -54,6 +54,7 @@ function createHarness(options: {
     next();
   });
   app.post("/recipes", controller.create);
+  app.get("/recipes", controller.list);
   app.use(
     (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       nextErrors.push(err);
@@ -74,9 +75,11 @@ function createHarness(options: {
 function createMockService(): {
   readonly service: IRecipeService;
   readonly create: ReturnType<typeof vi.fn<IRecipeService["create"]>>;
+  readonly list: ReturnType<typeof vi.fn<IRecipeService["list"]>>;
 } {
   const create = vi.fn<IRecipeService["create"]>().mockResolvedValue(PERSISTED);
-  return { service: { create }, create };
+  const list = vi.fn<IRecipeService["list"]>();
+  return { service: { create, list }, create, list };
 }
 
 describe("RecipeController.create", () => {
@@ -142,6 +145,76 @@ describe("RecipeController.create", () => {
 
     // Act
     await request(app).post("/recipes").send(VALID_BODY);
+
+    // Assert
+    expect(nextErrors).toEqual([failure]);
+  });
+});
+
+describe("RecipeController.list", () => {
+  const VALID_QUERY: ListRecipesQueryDTO = { status: "DRAFT", page: 1, limit: 20 };
+  const PAGE: PaginatedRecipes = {
+    items: [PERSISTED],
+    meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
+  };
+
+  it("usa req.valid.query (ignorando req.query crudo) y responde 200 JSend con items y meta", async () => {
+    // Arrange
+    const { service, list } = createMockService();
+    list.mockResolvedValueOnce(PAGE);
+    const { app, nextErrors } = createHarness({ service, valid: { query: VALID_QUERY } });
+
+    // Act
+    const res = await request(app).get("/recipes?status=APPROVED&limit=999");
+
+    // Assert
+    expect(nextErrors).toEqual([]);
+    expect(list).toHaveBeenCalledWith(VALID_QUERY);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      statusCode: 200,
+      message: "Recetas obtenidas exitosamente",
+      data: JSON.parse(JSON.stringify(PAGE)),
+    });
+  });
+
+  it("no exige req.user (endpoint público)", async () => {
+    // Arrange
+    const { service, list } = createMockService();
+    list.mockResolvedValueOnce(PAGE);
+    const { app } = createHarness({ service, valid: { query: VALID_QUERY } });
+
+    // Act
+    const res = await request(app).get("/recipes");
+
+    // Assert
+    expect(res.status).toBe(200);
+  });
+
+  it("falla cerrado con 400 si falta req.valid.query sin invocar al servicio", async () => {
+    // Arrange
+    const { service, list } = createMockService();
+    const { app, nextErrors } = createHarness({ service });
+
+    // Act
+    const res = await request(app).get("/recipes");
+
+    // Assert
+    expect(res.status).toBe(400);
+    expect(nextErrors[0]).toBeInstanceOf(BadRequestError);
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("delega en next(err) los errores del servicio", async () => {
+    // Arrange
+    const { service, list } = createMockService();
+    const failure = new Error("inesperado");
+    list.mockRejectedValueOnce(failure);
+    const { app, nextErrors } = createHarness({ service, valid: { query: VALID_QUERY } });
+
+    // Act
+    await request(app).get("/recipes");
 
     // Assert
     expect(nextErrors).toEqual([failure]);

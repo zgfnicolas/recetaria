@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   createRecipeSchema,
+  DEFAULT_LIMIT,
+  DEFAULT_PAGE,
   DESCRIPTION_MAX_LENGTH,
+  listRecipesQuerySchema,
   MAX_INGREDIENTS,
+  MAX_LIMIT,
   MAX_NUMERIC_AMOUNT,
+  MAX_PAGE,
+  MAX_RESULT_WINDOW,
   MAX_TAGS,
 } from "./recipe.schema.js";
 
@@ -224,5 +230,116 @@ describe("createRecipeSchema — prevención BOPLA (z.strictObject)", () => {
     expect(unrecognized?.map((issue) => issue.path.map(String).join("."))).toEqual(
       expect.arrayContaining(["ingredients.0", "nutritionalInfo"]),
     );
+  });
+});
+
+describe("listRecipesQuerySchema — paginación y filtros (HU-04)", () => {
+  const AUTHOR_V4 = "6f1c2d3e-4b5a-4c6d-8e7f-0123456789ab";
+
+  function queryIssuePaths(input: Record<string, unknown>): string[] {
+    const result = listRecipesQuerySchema.safeParse(input);
+    if (result.success) {
+      return [];
+    }
+    return result.error.issues.map((issue) => issue.path.map(String).join(".") || issue.code);
+  }
+
+  it("aplica defaults page = 1 y limit = 20 sin filtros", () => {
+    expect(listRecipesQuerySchema.parse({})).toEqual({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
+  });
+
+  it("acepta filtros combinados y convierte page/limit a número", () => {
+    // Act
+    const result = listRecipesQuerySchema.parse({
+      status: "APPROVED",
+      difficulty: "EASY",
+      authorId: AUTHOR_V4,
+      page: "3",
+      limit: "50",
+    });
+
+    // Assert
+    expect(result).toEqual({
+      status: "APPROVED",
+      difficulty: "EASY",
+      authorId: AUTHOR_V4,
+      page: 3,
+      limit: 50,
+    });
+  });
+
+  it.each([
+    ["limit", "1", 1],
+    ["limit", String(MAX_LIMIT), MAX_LIMIT],
+    ["page", "1", 1],
+  ])("acepta el borde %s = %s", (field, value, expected) => {
+    expect(listRecipesQuerySchema.parse({ [field]: value })[field as "page" | "limit"]).toBe(expected);
+  });
+
+  it.each([
+    [String(MAX_PAGE), "1"],
+    ["100", "100"],
+    ["500", undefined],
+  ])("acepta page = %s con limit = %s dentro de la ventana de 10000 resultados", (page, limit) => {
+    expect(
+      listRecipesQuerySchema.safeParse(limit === undefined ? { page } : { page, limit }).success,
+    ).toBe(true);
+  });
+
+  it.each([
+    ["101", "100"],
+    ["501", undefined],
+    [String(MAX_PAGE), "2"],
+  ])("rechaza page = %s con limit = %s por superar la ventana de 10000 resultados (OWASP API4)", (page, limit) => {
+    // Act
+    const result = listRecipesQuerySchema.safeParse(limit === undefined ? { page } : { page, limit });
+
+    // Assert
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ["page"],
+        message: `page × limit no puede superar ${String(MAX_RESULT_WINDOW)} resultados`,
+      }),
+    ]);
+  });
+
+  it.each([
+    ["limit", "0"],
+    ["limit", "101"],
+    ["limit", "-1"],
+    ["page", "0"],
+    ["page", String(MAX_PAGE + 1)],
+    ["page", "99999999999999999999"],
+    ["page", "1e1"],
+    ["page", " 2 "],
+    ["page", "2.0"],
+    ["page", "0x10"],
+    ["page", "02"],
+    ["page", ""],
+    ["limit", ["10", "20"]],
+  ])("rechaza %s = %j (OWASP API4)", (field, value) => {
+    expect(queryIssuePaths({ [field]: value })).toContain(field);
+  });
+
+  it.each([
+    ["status", "PUBLISHED"],
+    ["status", "draft"],
+    ["status", ""],
+    ["status", ["DRAFT", "APPROVED"]],
+    ["difficulty", "IMPOSSIBLE"],
+    ["authorId", "no-es-uuid"],
+    ["authorId", "6f1c2d3e-4b5a-1c6d-8e7f-0123456789ab"],
+  ])("rechaza el filtro %s = %j", (field, value) => {
+    expect(queryIssuePaths({ [field]: value })).toContain(field);
+  });
+
+  it("rechaza parámetros de consulta desconocidos (BOPLA)", () => {
+    // Act
+    const result = listRecipesQuerySchema.safeParse({ sort: "title", page: "1" });
+
+    // Assert
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: ["sort"] });
   });
 });

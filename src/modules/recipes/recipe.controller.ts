@@ -2,8 +2,17 @@ import type { NextFunction, Request, Response } from "express";
 import type { ValidatedRequest } from "../../middlewares/validate.middleware.js";
 import { BadRequestError, UnauthorizedError } from "../../shared/errors/app-error.js";
 import { sendSuccess } from "../../shared/http/jsend.js";
-import type { CreateRecipeDTO } from "./recipe.schema.js";
+import type { CreateRecipeDTO, ListRecipesQueryDTO } from "./recipe.schema.js";
 import type { IRecipeService } from "./recipe.service.js";
+
+function readValidatedQuery<TQuery>(req: Request): TQuery {
+  const validatedReq = req as Partial<ValidatedRequest<unknown, TQuery>>;
+  const query = validatedReq.valid?.query;
+  if (query === undefined) {
+    throw new BadRequestError("Error de validación");
+  }
+  return query;
+}
 
 function readValidatedBody<TBody>(req: Request): TBody {
   const validatedReq = req as Partial<ValidatedRequest<TBody>>;
@@ -42,6 +51,20 @@ export class RecipeController {
         statusCode: 201,
         message: "Receta creada exitosamente",
         data: recipe,
+      });
+    } catch (err: unknown) {
+      next(err);
+    }
+  };
+
+  readonly list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const query = readValidatedQuery<ListRecipesQueryDTO>(req);
+      const page = await this.#recipeService.list(query);
+      sendSuccess(res, {
+        statusCode: 200,
+        message: "Recetas obtenidas exitosamente",
+        data: page,
       });
     } catch (err: unknown) {
       next(err);

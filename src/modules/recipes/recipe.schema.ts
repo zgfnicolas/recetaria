@@ -142,3 +142,53 @@ export const createRecipeSchema = z.strictObject({
 export type IngredientDTO = z.infer<typeof ingredientItemSchema>;
 export type NutritionalInfoDTO = z.infer<typeof nutritionalInfoSchema>;
 export type CreateRecipeDTO = z.infer<typeof createRecipeSchema>;
+
+/** Paginación acotada del catálogo (`ADR-0006`, OWASP API4). */
+export const DEFAULT_PAGE = 1;
+export const DEFAULT_LIMIT = 20;
+export const MAX_LIMIT = 100;
+/**
+ * Tope de página: mantiene `skip = (page - 1) * limit` dentro del `Int` de 32 bits de Prisma
+ * (evita un `500`) y descarta `OFFSET` gigantes.
+ */
+export const MAX_PAGE = 10_000;
+/**
+ * Ventana máxima de resultados alcanzables (`page × limit`): acota el `OFFSET` y el costo
+ * del ordenamiento en un endpoint público sin rate limit (OWASP API4).
+ */
+export const MAX_RESULT_WINDOW = 10_000;
+
+const POSITIVE_INTEGER_PATTERN = /^[1-9]\d*$/;
+
+/**
+ * Entero positivo desde query string con parseo estricto de dígitos
+ * (rechaza `" 2 "`, `"1e1"`, `"0x10"`, `"2.0"`, `""` y arreglos por parámetro repetido).
+ */
+function positiveIntQueryParam(label: string, max: number, defaultValue: number) {
+  const rangeMessage = `${label} debe ser un entero entre 1 y ${String(max)}`;
+  return z
+    .string({ error: rangeMessage })
+    .regex(POSITIVE_INTEGER_PATTERN, { error: rangeMessage })
+    .transform(Number)
+    .pipe(z.int({ error: rangeMessage }).min(1, { error: rangeMessage }).max(max, { error: rangeMessage }))
+    .default(defaultValue);
+}
+
+/**
+ * Esquema estricto de `req.query` para `GET /api/v1/recipes` (`HU-04`).
+ * Rechaza claves desconocidas, valores vacíos y parámetros repetidos con `400`.
+ */
+export const listRecipesQuerySchema = z
+  .strictObject({
+    status: z.enum(RECIPE_STATUSES, { error: "Estado inválido" }).optional(),
+    difficulty: z.enum(RECIPE_DIFFICULTIES, { error: "Dificultad inválida" }).optional(),
+    authorId: z.uuidv4({ error: "authorId debe ser un UUID v4 válido" }).optional(),
+    page: positiveIntQueryParam("page", MAX_PAGE, DEFAULT_PAGE),
+    limit: positiveIntQueryParam("limit", MAX_LIMIT, DEFAULT_LIMIT),
+  })
+  .refine((query) => query.page * query.limit <= MAX_RESULT_WINDOW, {
+    path: ["page"],
+    error: `page × limit no puede superar ${String(MAX_RESULT_WINDOW)} resultados`,
+  });
+
+export type ListRecipesQueryDTO = z.infer<typeof listRecipesQuerySchema>;

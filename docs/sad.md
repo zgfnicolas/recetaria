@@ -56,7 +56,7 @@ flowchart TB
 - **Catálogo de endpoints base:**
   - `GET /health` (Público, liveness sin DB) y `GET /health/ready` (Público, readiness con `SELECT 1`)
   - `POST /api/v1/auth/register` (Público, acepta `role` opcional en MVP) y `POST /api/v1/auth/login` (Público, rechaza `isActive === false` con `401`)
-  - `GET /api/v1/recipes` (Público, devuelve `data: { items, meta }` ordenado por `createdAt DESC, id DESC`, filtros `?status=&difficulty=&authorId=` y paginación `?page=1&limit=20` máx `100`), `GET /api/v1/recipes/mine` (Autenticado, devuelve solo las recetas de `req.user.id`, registrada antes de `/:id`), `GET /api/v1/recipes/:id` (Público, UUIDv4)
+  - `GET /api/v1/recipes` (Público, devuelve `data: { items, meta }` ordenado por `createdAt DESC, id DESC`, filtros `?status=&difficulty=&authorId=` y paginación `?page=1&limit=20` con `limit` máx `100` y ventana `page × limit` ≤ `10000`), `GET /api/v1/recipes/mine` (Autenticado, devuelve solo las recetas de `req.user.id`, registrada antes de `/:id`), `GET /api/v1/recipes/:id` (Público, UUIDv4)
   - `POST /api/v1/recipes` (Autenticado, inicia en `DRAFT` con `slug` `<titulo>-<8-hex>`)
   - `PUT /api/v1/recipes/:id` (Autor, payload parcial o total; reinicia a `DRAFT` con auditoría solo si estaba `APPROVED`)
   - `DELETE /api/v1/recipes/:id` (Autor o `ADMIN`, borrado físico con registro en `audit_logs`)

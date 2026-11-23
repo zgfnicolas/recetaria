@@ -58,7 +58,7 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 | `GET` | `/health/ready` | Público | Readiness verificando conectividad a PostgreSQL (`SELECT 1`) | `200`, `503` |
 | `POST` | `/api/v1/auth/register` | Público | Registra usuario con Bcrypt (`>= 10` rounds); acepta `role` opcional en MVP (`USER` por defecto) | `201`, `400`, `409` |
 | `POST` | `/api/v1/auth/login` | Público | Autentica credenciales y devuelve Bearer JWT (`{ id, role }`); rechaza `isActive = false` | `200`, `400`, `401` |
-| `GET` | `/api/v1/recipes` | Público | Lista recetas paginadas (`?status=&difficulty=&authorId=&page=1&limit=20`, máx. `100`) ordenadas por `createdAt DESC, id DESC` | `200`, `400` |
+| `GET` | `/api/v1/recipes` | Público | Lista recetas paginadas (`?status=&difficulty=&authorId=&page=1&limit=20`, `limit` máx. `100`, `page × limit` ≤ `10000`) ordenadas por `createdAt DESC, id DESC` | `200`, `400` |
 | `GET` | `/api/v1/recipes/mine` | Autenticado (JWT) | Lista paginada exclusivamente de las recetas creadas por el usuario autenticado (`authorId === req.user.id`) | `200`, `400`, `401` |
 | `GET` | `/api/v1/recipes/:id` | Público | Obtiene el detalle de una receta por UUID | `200`, `400`, `404` |
 | `POST` | `/api/v1/recipes` | Autenticado (JWT) | Crea una receta en estado `DRAFT` con `slug` automático y validaciones `RN-07` en servicio | `201`, `400`, `401`, `409` |

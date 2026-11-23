@@ -3,6 +3,7 @@ import { BadRequestError, ConflictError } from "../../shared/errors/app-error.js
 import type {
   CreateRecipeRecordInput,
   IRecipeRepository,
+  PaginatedRecipes,
   RecipeRecord,
 } from "./recipe.repository.js";
 import type { CreateRecipeDTO } from "./recipe.schema.js";
@@ -37,12 +38,14 @@ function toRecord(input: CreateRecipeRecordInput): RecipeRecord {
 function createMockRepository(): {
   readonly repository: IRecipeRepository;
   readonly create: ReturnType<typeof vi.fn<IRecipeRepository["create"]>>;
+  readonly findManyPaginated: ReturnType<typeof vi.fn<IRecipeRepository["findManyPaginated"]>>;
 } {
   const create = vi
     .fn<IRecipeRepository["create"]>()
     .mockImplementation((input) => Promise.resolve(toRecord(input)));
   const findBySlug = vi.fn<IRecipeRepository["findBySlug"]>().mockResolvedValue(null);
-  return { repository: { create, findBySlug }, create };
+  const findManyPaginated = vi.fn<IRecipeRepository["findManyPaginated"]>();
+  return { repository: { create, findBySlug, findManyPaginated }, create, findManyPaginated };
 }
 
 async function captureError(promise: Promise<unknown>): Promise<unknown> {
@@ -227,3 +230,84 @@ describe("RecipeService.create — propagación de errores del repositorio", () 
     expect(err).toBe(failure);
   });
 });
+
+describe("RecipeService.list — catálogo paginado (HU-04)", () => {
+  it("delega en findManyPaginated los filtros, la página y el límite validados y devuelve su resultado", async () => {
+    // Arrange
+    const { repository, findManyPaginated } = createMockRepository();
+    const page: PaginatedRecipes = {
+      items: [toRecord({ ...buildRecordInput(), status: "APPROVED" })],
+      meta: { page: 2, limit: 5, total: 6, totalPages: 2 },
+    };
+    findManyPaginated.mockResolvedValueOnce(page);
+    const service = new RecipeService(repository);
+
+    // Act
+    const result = await service.list({
+      status: "APPROVED",
+      difficulty: "EASY",
+      authorId: AUTHOR_ID,
+      page: 2,
+      limit: 5,
+    });
+
+    // Assert
+    expect(findManyPaginated).toHaveBeenCalledWith({
+      filters: { status: "APPROVED", difficulty: "EASY", authorId: AUTHOR_ID },
+      page: 2,
+      limit: 5,
+    });
+    expect(result).toBe(page);
+  });
+
+  it("no agrega filtros de visibilidad: sin filtros el catálogo incluye DRAFT y APPROVED", async () => {
+    // Arrange
+    const { repository, findManyPaginated } = createMockRepository();
+    findManyPaginated.mockResolvedValueOnce({
+      items: [],
+      meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+    });
+    const service = new RecipeService(repository);
+
+    // Act
+    await service.list({ page: 1, limit: 20 });
+
+    // Assert
+    expect(findManyPaginated).toHaveBeenCalledWith({
+      filters: { status: undefined, difficulty: undefined, authorId: undefined },
+      page: 1,
+      limit: 20,
+    });
+  });
+
+  it("propaga errores del repositorio sin envolverlos", async () => {
+    // Arrange
+    const { repository, findManyPaginated } = createMockRepository();
+    const failure = new Error("timeout");
+    findManyPaginated.mockRejectedValueOnce(failure);
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.list({ page: 1, limit: 20 }));
+
+    // Assert
+    expect(err).toBe(failure);
+  });
+});
+
+function buildRecordInput(): CreateRecipeRecordInput {
+  return {
+    title: "Ñoquis",
+    slug: "noquis-0a1b2c3d",
+    description: "Ñoquis de papa tradicionales.",
+    difficulty: "EASY",
+    status: "DRAFT",
+    prepTimeMinutes: 30,
+    tags: [],
+    ingredients: [{ name: "Papa", quantity: 1, unit: "kg" }],
+    nutritionalInfo: null,
+    coverImageUrl: null,
+    videoUrl: null,
+    authorId: AUTHOR_ID,
+  };
+}
