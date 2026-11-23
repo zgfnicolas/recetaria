@@ -25,7 +25,7 @@
 | Aprobar receta de terceros (`PUT /api/v1/recipes/:id/approve`) | | ✓ | ✓ | | |
 
 ## Reglas especiales
-- **Visibilidad y paginación en lecturas públicas (`GET /api/v1/recipes` y `GET /api/v1/recipes/:id`):** por defecto devuelven recetas `DRAFT` y `APPROVED` ordenadas por `createdAt DESC, id DESC`, paginadas con `?page=1&limit=20` (máximo `100`) y filtros opcionales `?status=`, `?difficulty=` y `?authorId=`.
+- **Visibilidad y paginación en lecturas públicas (`GET /api/v1/recipes` y `GET /api/v1/recipes/:id`):** por defecto devuelven recetas `DRAFT` y `APPROVED` ordenadas por `createdAt DESC, id DESC`, paginadas con `?page=1&limit=20` (`limit` máximo `100` y ventana `page × limit` ≤ `10000`; parámetros desconocidos, vacíos o repetidos → `400`) y filtros opcionales `?status=`, `?difficulty=` y `?authorId=`.
 - **Cuentas inactivas (`isActive = false`):** `POST /api/v1/auth/login` rechaza el inicio de sesión con `401 Unauthorized` genérico (`RN-08`); `authMiddleware` se mantiene 100 % stateless en el MVP.
 - **Propiedad exclusiva en edición (`RN-02`):** ningún usuario (ni siquiera `ADMIN`) puede editar una receta cuyo `authorId` no coincida con su `req.user.id`.
 - **Permiso de borrado (`RN-03`):** únicamente el autor original (`recipe.authorId === req.user.id`) o un usuario con rol `ADMIN` pueden eliminar una receta.

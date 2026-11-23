@@ -3,9 +3,10 @@ import {
   MAX_PREP_TIME_MINUTES,
   MIN_PREP_TIME_MINUTES,
   type CreateRecipeDTO,
+  type ListRecipesQueryDTO,
 } from "./recipe.schema.js";
 import { generateRecipeSlug } from "./recipe.slug.js";
-import type { IRecipeRepository, RecipeRecord } from "./recipe.repository.js";
+import type { IRecipeRepository, PaginatedRecipes, RecipeRecord } from "./recipe.repository.js";
 
 export const BUSINESS_VALIDATION_MESSAGE = "Error de validación de negocio";
 
@@ -17,6 +18,7 @@ export type RecipeServiceOptions = Readonly<{
 
 export interface IRecipeService {
   create(authorId: string, dto: CreateRecipeDTO): Promise<RecipeRecord>;
+  list(query: ListRecipesQueryDTO): Promise<PaginatedRecipes>;
 }
 
 /**
@@ -90,6 +92,22 @@ export class RecipeService implements IRecipeService {
       coverImageUrl: dto.coverImageUrl ?? null,
       videoUrl: dto.videoUrl ?? null,
       authorId,
+    });
+  }
+
+  /**
+   * Lista el catálogo público (`DRAFT` y `APPROVED` por defecto, `HU-04`) con filtros
+   * combinables y paginación acotada ya validada en el borde.
+   */
+  async list(query: ListRecipesQueryDTO): Promise<PaginatedRecipes> {
+    return this.#recipeRepository.findManyPaginated({
+      filters: {
+        status: query.status,
+        difficulty: query.difficulty,
+        authorId: query.authorId,
+      },
+      page: query.page,
+      limit: query.limit,
     });
   }
 }
