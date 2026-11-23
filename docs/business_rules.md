@@ -33,7 +33,7 @@ Las operaciones de aprobación (`APPROVE`), reinicio por edición desde `APPROVE
 - Se aplica en: `RecipeRepository.approveWithAudit()`, `RecipeRepository.updateWithOptionalReset()` y `RecipeRepository.deleteWithAudit()`
 
 ### RN-07 — Validaciones de dominio en servicio
-Además de la validación estructural estricta con Zod 4 (`z.strictObject`) en el middleware, `RecipeService` exige explícitamente que `prepTimeMinutes` sea un entero entre `1` y `1440` (24 horas) y que `ingredients` incluya al menos un ingrediente con `quantity > 0` (`400 Bad Request`).
+Además de la validación estructural estricta con Zod 4 (`z.strictObject`) en el middleware, `RecipeService` exige explícitamente que `prepTimeMinutes` sea un entero entre `1` y `1440` (24 horas) y que `ingredients` incluya al menos un ingrediente y que **cada** ingrediente tenga `quantity > 0`, acumulando todos los incumplimientos en un único `400 Bad Request`.
 - Origen: requisito 5 de la consigna (validaciones de negocio en capa de servicio) y constraint SQL `chk_prep_time_positive`
 - Se aplica en: `RecipeService.create()` y `RecipeService.update()`
 

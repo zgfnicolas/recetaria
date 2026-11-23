@@ -39,7 +39,7 @@ Una capa solo importa de la siguiente. Los servicios y controladores nunca llama
 - Solo el autor o `ADMIN` pueden eliminar una receta (`RN-03`)
 - Solo `CHEF` o `NUTRITIONIST` pueden aprobar recetas (`RN-04`) y no pueden auto-aprobar las propias (`RN-05`)
 - Toda aprobación (`APPROVE`), reinicio por edición (`RESET_TO_DRAFT`) y borrado (`DELETE`) ejecuta actualización/borrado de `recipes` e inserción en `audit_logs` dentro de `prisma.$transaction` (`RN-06`)
-- `prepTimeMinutes` entre `1` y `1440` y al menos un ingrediente válido (`quantity > 0`) en `ingredients` (`RN-07`); contraseñas con Bcrypt `>= 10` rounds (`RN-08`)
+- `prepTimeMinutes` entre `1` y `1440` y al menos un ingrediente en `ingredients`, todos con `quantity > 0` (`RN-07`); contraseñas con Bcrypt `>= 10` rounds (`RN-08`)
 
 ## Convenciones
 - TypeScript estricto: prohibido `any`; inferir DTOs con `z.infer<typeof schema>`
