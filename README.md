@@ -44,7 +44,14 @@ POSTGRES_PORT=5432
 DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/recetaria?schema=public"
 JWT_SECRET="reemplazar_por_secreto_criptografico_local_de_al_menos_64_caracteres"
 JWT_EXPIRES_IN="1d"
+TRUST_PROXY=0
 ```
+
+`TRUST_PROXY` indica en qué proxies confiar para leer la IP real del cliente desde `X-Forwarded-For` (la usa el rate limit del catálogo):
+- `0` o vacío (por defecto): la API recibe las conexiones directamente; `X-Forwarded-For` se ignora.
+- `1`: hay exactamente un proxy inverso delante (Nginx, Traefik, un balanceador); usar el número **exacto** de saltos (máximo `10`). Un valor mayor que los proxies reales, o `1` con la API expuesta sin proxy, permite que el cliente elija su IP con `X-Forwarded-For`.
+- Lista de IPs, rangos CIDR o presets (`loopback`, `linklocal`, `uniquelocal`), p. ej. `TRUST_PROXY=172.18.0.10`: confía solo en esas direcciones y es la opción más estricta. Preferí la IP exacta del proxy: un preset o rango amplio (p. ej. `uniquelocal` o la red de Docker completa) deja que cualquier otro host de esa red falsifique su IP.
+- Se rechazan al arrancar `true`, `false` y rangos más amplios que `/8` en IPv4 o `/16` en IPv6 (`0.0.0.0/0`, `0.0.0.0/1`, `::/0`, `::ffff:0:0/96`, …): equivaldrían a confiar en cualquier cliente.
 
 ## Catálogo de Endpoints
 
