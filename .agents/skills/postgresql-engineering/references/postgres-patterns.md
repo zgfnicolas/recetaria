@@ -8,7 +8,7 @@ Referencia técnica de [postgresql-engineering](../SKILL.md) sobre la baseline *
 
 Estado actual en `database_schema_init.sql`:
 - `users`: `PK(id)`, `UNIQUE(email)`, `idx_users_role_isactive(role, "isActive")` *(nota: `idx_users_email` es redundante con `UNIQUE(email)`)*.
-- `recipes`: `PK(id)`, `UNIQUE(slug)`, `idx_recipes_authorid("authorId")`, `idx_recipes_status_difficulty(status, difficulty)` *(nota: `idx_recipes_slug` es redundante con `UNIQUE(slug)`)*.
+- `recipes`: `PK(id)`, `UNIQUE(slug)`, `idx_recipes_createdat_id("createdAt" DESC, id DESC)`, `idx_recipes_authorid_createdat_id("authorId", "createdAt" DESC, id DESC)` (reemplaza a `idx_recipes_authorid`, #36), `idx_recipes_status_difficulty(status, difficulty)` *(nota: `idx_recipes_slug` es redundante con `UNIQUE(slug)`)*.
 - `audit_logs`: `PK(id)`, `idx_audit_logs_entity("entityName", "entityId")`, `idx_audit_logs_createdat("createdAt")`.
 
 Candidatos de índices cuando crezca el tráfico (crear siempre con `CONCURRENTLY` y verificar con `EXPLAIN`):

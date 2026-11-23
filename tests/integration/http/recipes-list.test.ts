@@ -113,6 +113,8 @@ describe("GET /api/v1/recipes — Catálogo público paginado (Integración HTTP
     app = buildApp({
       prisma: db.prisma,
       jwt: TEST_JWT_CONFIG,
+      // Una sola app para toda la suite: el rate limit (#36) se prueba en recipes-rate-limit.test.ts
+      publicRateLimit: false,
       onLog: () => undefined,
       onError: () => undefined,
     });

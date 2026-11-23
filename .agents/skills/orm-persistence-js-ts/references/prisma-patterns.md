@@ -99,7 +99,9 @@ model Recipe {
   author          User         @relation("RecipeAuthor", fields: [authorId], references: [id], onDelete: Restrict)
   reviewedBy      User?        @relation("RecipeReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 
-  @@index([authorId], map: "idx_recipes_authorid")
+  // Orden determinístico del catálogo y de /mine (#36); el compuesto por autor reemplaza a idx_recipes_authorid
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "idx_recipes_createdat_id")
+  @@index([authorId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_recipes_authorid_createdat_id")
   @@index([status, difficulty], map: "idx_recipes_status_difficulty")
   @@map("recipes")
 }

@@ -9,6 +9,10 @@ import {
 import type { AppPrismaClient } from "./infrastructure/database/prisma.js";
 import { createErrorHandlerMiddleware, type ErrorLogger } from "./middlewares/error-handler.middleware.js";
 import { createLoggerMiddleware, type LogWriter } from "./middlewares/logger.middleware.js";
+import {
+  RATE_LIMIT_EXPOSED_HEADERS,
+  type RateLimitConfig,
+} from "./middlewares/rate-limit.middleware.js";
 import { notFoundMiddleware } from "./middlewares/not-found.middleware.js";
 import { createHealthRouter, type ReadinessDatabaseClient } from "./shared/http/health.router.js";
 
@@ -25,6 +29,7 @@ function createDefaultCorsOptions(): CorsOptions {
     origin: "*",
     methods: [...DEFAULT_CORS_METHODS],
     allowedHeaders: [...DEFAULT_CORS_ALLOWED_HEADERS],
+    exposedHeaders: [...RATE_LIMIT_EXPOSED_HEADERS],
     credentials: false,
   };
 }
@@ -35,6 +40,8 @@ export type BuildAppOptions = Readonly<{
   prisma?: AppPrismaClient | ReadinessDatabaseClient | undefined;
   readinessTimeoutMs?: number | undefined;
   jwt?: JwtConfig | undefined;
+  /** Rate limit del catálogo público (default 120 req/min por IP); `false` lo desactiva. */
+  publicRateLimit?: RateLimitConfig | false | undefined;
   apiRouters?: readonly MountedRouter[] | undefined;
   cors?: CorsOptions | undefined;
   trustProxy?: boolean | number | string | undefined;
@@ -77,7 +84,10 @@ export function buildApp(options?: BuildAppOptions): Express {
   const mountedRouters =
     options?.apiRouters ??
     (isAppPrismaClient(options?.prisma)
-      ? buildApiRouters(options.prisma, { jwt: options?.jwt })
+      ? buildApiRouters(options.prisma, {
+          jwt: options?.jwt,
+          publicRateLimit: options?.publicRateLimit,
+        })
       : []);
 
   for (const mounted of mountedRouters) {

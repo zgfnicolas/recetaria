@@ -49,14 +49,15 @@ flowchart TB
   - `GET /health` (liveness): liviano, **sin consultar PostgreSQL**, responde `200 OK` inmediatamente (usado por el `HEALTHCHECK` exec del `Dockerfile` para evitar reinicios en cascada).
   - `GET /health/ready` (readiness): verifica conectividad con PostgreSQL (`SELECT 1`), devolviendo `200 OK` o `503 Service Unavailable`.
   - `loggerMiddleware` imprime en `stdout` cada petición con formato `[ISO_DATE] METHOD /url` sin registrar headers sensibles ni contraseñas.
+- **Protección de recursos en lecturas públicas (OWASP API4, #36):** `GET /api/v1/recipes` aplica `createRateLimitMiddleware` (`express-rate-limit`, ventana fija de 120 solicitudes/minuto por IP, IPv6 agrupado por `/56`) **antes** de `validateMiddleware`, con headers draft-8 `RateLimit`/`RateLimit-Policy` y `Retry-After` expuestos por CORS y `429 Too Many Requests` en JSend. El orden `("createdAt" DESC, id DESC)` del catálogo y de `/mine` se resuelve con `idx_recipes_createdat_id` e `idx_recipes_authorid_createdat_id` sin *Sort* de tabla completa (medición en `scripts/perf/explain-recipes-list.sql`).
 - **Autenticación y autorización:** Bearer JWT en header `Authorization` con payload `{ id, role }` (`algorithms: ["HS256"]`), más `rbacMiddleware([roles])` para rutas restringidas.
 - **Contrato de respuesta universal (JSend extendido):**
   - Éxito (`200`, `201`): `{ "success": true, "statusCode": 200, "message": "...", "data": { ... } }`
-  - Error (`400`, `401`, `403`, `404`, `409`, `500`, `503`): `{ "success": false, "statusCode": 400, "message": "...", "errors": [{ "field": "...", "message": "..." }] }`
+  - Error (`400`, `401`, `403`, `404`, `409`, `429`, `500`, `503`): `{ "success": false, "statusCode": 400, "message": "...", "errors": [{ "field": "...", "message": "..." }] }`
 - **Catálogo de endpoints base:**
   - `GET /health` (Público, liveness sin DB) y `GET /health/ready` (Público, readiness con `SELECT 1`)
   - `POST /api/v1/auth/register` (Público, acepta `role` opcional en MVP) y `POST /api/v1/auth/login` (Público, rechaza `isActive === false` con `401`)
-  - `GET /api/v1/recipes` (Público, devuelve `data: { items, meta }` ordenado por `createdAt DESC, id DESC`, filtros `?status=&difficulty=&authorId=` y paginación `?page=1&limit=20` con `limit` máx `100` y ventana `page × limit` ≤ `10000`), `GET /api/v1/recipes/mine` (Autenticado, devuelve solo las recetas de `req.user.id`, registrada antes de `/:id`), `GET /api/v1/recipes/:id` (Público, UUIDv4)
+  - `GET /api/v1/recipes` (Público, devuelve `data: { items, meta }` ordenado por `createdAt DESC, id DESC`, filtros `?status=&difficulty=&authorId=` y paginación `?page=1&limit=20` con `limit` máx `100` y ventana `page × limit` ≤ `10000`; rate limit de 120 req/min por IP con `429` JSend, índice `idx_recipes_createdat_id`), `GET /api/v1/recipes/mine` (Autenticado, devuelve solo las recetas de `req.user.id`, registrada antes de `/:id`), `GET /api/v1/recipes/:id` (Público, UUIDv4)
   - `POST /api/v1/recipes` (Autenticado, inicia en `DRAFT` con `slug` `<titulo>-<8-hex>`)
   - `PUT /api/v1/recipes/:id` (Autor, payload parcial o total; reinicia a `DRAFT` con auditoría solo si estaba `APPROVED`)
   - `DELETE /api/v1/recipes/:id` (Autor o `ADMIN`, borrado físico con registro en `audit_logs`)
@@ -67,6 +68,8 @@ flowchart TB
 ## 7. Riesgos, deuda técnica y paso a Fase Beta / Producción
 - **Código fuente y colección Thunder Client pendientes de implementación en `src/` y `docs/thunder-client-collection.json`:** se implementarán por fases tras cerrar la Fase 2 de configuración técnica.
 - **Checklist diferido a Fase Beta / Producción (`ADR-0006`):** migración de secretos `.env` a archivos `secrets:`/`*_FILE`, fijado por digest `@sha256:...` en imágenes base, separación de roles PostgreSQL (`recetaria_runtime` vs `recetaria_migrator`), restricción de `role` en `/register` vía KYC y subida directa a S3 (ver [roadmap.md](roadmap.md)).
+- **Índices en tablas con datos (#36):** la migración `20261123145000_recipes_list_order_indexes` usa `CREATE INDEX` simple (bloquea escrituras en `recipes` mientras se construye; aceptable en el MVP). En Fase Beta / Producción, toda creación de índices sobre tablas con tráfico debe usar `CREATE INDEX CONCURRENTLY` en una migración sin transacción.
+- **Rate limit en memoria y `trust proxy` (#36):** el store de `express-rate-limit` es por proceso (válido para **una réplica**); con varias réplicas se requiere store compartido (p. ej. `rate-limit-redis`). `server.ts` no configura `trust proxy`: detrás de un proxy inverso todos los clientes compartirían la IP del proxy y deberá configurarse el número exacto de saltos (nunca `true`, que permite falsificar `X-Forwarded-For`); seguimiento en #38, bloqueante para desplegar detrás de un proxy. Rate limit de `/auth/login`: #39.
 - **Filtros avanzados sobre JSONB:** las búsquedas iniciales indexan solo columnas escalares (`status`, `difficulty`, `authorId`).
 
 Decisiones de arquitectura: ver [docs/adr/](adr/)

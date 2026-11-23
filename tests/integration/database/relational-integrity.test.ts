@@ -211,7 +211,7 @@ describe("Integridad relacional PostgreSQL 15 — migración inicial", () => {
       ]);
     });
 
-    it("declara los 6 índices B-Tree esperados sin índices duplicados sobre email ni slug", async () => {
+    it("declara los 7 índices B-Tree esperados sin índices duplicados sobre email ni slug (#36 retira idx_recipes_authorid)", async () => {
       // Act
       const rows = await db.prisma.$queryRaw<Array<{ tablename: string; indexname: string }>>`
         SELECT tablename, indexname
@@ -227,7 +227,8 @@ describe("Integridad relacional PostgreSQL 15 — migración inicial", () => {
         { tablename: "audit_logs", indexname: "idx_audit_logs_createdat" },
         { tablename: "audit_logs", indexname: "idx_audit_logs_entity" },
         { tablename: "audit_logs", indexname: "idx_audit_logs_userid" },
-        { tablename: "recipes", indexname: "idx_recipes_authorid" },
+        { tablename: "recipes", indexname: "idx_recipes_authorid_createdat_id" },
+        { tablename: "recipes", indexname: "idx_recipes_createdat_id" },
         { tablename: "recipes", indexname: "idx_recipes_status_difficulty" },
         { tablename: "recipes", indexname: "recipes_pkey" },
         { tablename: "recipes", indexname: "recipes_slug_key" },
@@ -235,6 +236,58 @@ describe("Integridad relacional PostgreSQL 15 — migración inicial", () => {
         { tablename: "users", indexname: "users_email_key" },
         { tablename: "users", indexname: "users_pkey" },
       ]);
+    });
+
+    it("define los índices de orden del catálogo con columnas y sentido exactos (#36)", async () => {
+      // Act
+      const rows = await db.prisma.$queryRaw<Array<{ indexname: string; indexdef: string }>>`
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND indexname IN ('idx_recipes_createdat_id', 'idx_recipes_authorid_createdat_id')
+        ORDER BY indexname
+      `;
+
+      // Assert
+      expect(rows).toEqual([
+        {
+          indexname: "idx_recipes_authorid_createdat_id",
+          indexdef:
+            'CREATE INDEX idx_recipes_authorid_createdat_id ON public.recipes USING btree ("authorId", "createdAt" DESC, id DESC)',
+        },
+        {
+          indexname: "idx_recipes_createdat_id",
+          indexdef:
+            'CREATE INDEX idx_recipes_createdat_id ON public.recipes USING btree ("createdAt" DESC, id DESC)',
+        },
+      ]);
+    });
+
+    it("resuelve el orden del catálogo y de /mine por índice, sin Sort (#36)", async () => {
+      // Arrange: con la tabla vacía el planner prefiere Seq/Bitmap Scan; se desactivan para
+      // verificar que el índice puede entregar el orden exacto sin un nodo Sort.
+      const authorId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+      // Act
+      const plans = await db.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SET LOCAL enable_seqscan = off`;
+        await tx.$executeRaw`SET LOCAL enable_bitmapscan = off`;
+        const catalog = await tx.$queryRaw<Array<{ "QUERY PLAN": string }>>`
+          EXPLAIN (COSTS OFF) SELECT id FROM recipes ORDER BY "createdAt" DESC, id DESC LIMIT 20`;
+        const mine = await tx.$queryRaw<Array<{ "QUERY PLAN": string }>>`
+          EXPLAIN (COSTS OFF) SELECT id FROM recipes WHERE "authorId" = ${authorId}::uuid
+          ORDER BY "createdAt" DESC, id DESC LIMIT 20`;
+        return {
+          catalog: catalog.map((row) => row["QUERY PLAN"]).join("\n"),
+          mine: mine.map((row) => row["QUERY PLAN"]).join("\n"),
+        };
+      });
+
+      // Assert
+      expect(plans.catalog).toMatch(/Index (Only )?Scan using idx_recipes_createdat_id /);
+      expect(plans.catalog).not.toContain("Sort");
+      expect(plans.mine).toMatch(/Index (Only )?Scan using idx_recipes_authorid_createdat_id /);
+      expect(plans.mine).not.toContain("Sort");
     });
   });
 
