@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/app-error.js";
+import type { Actor } from "../auth/index.js";
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} from "../../shared/errors/app-error.js";
 import type {
   CreateRecipeRecordInput,
   IRecipeRepository,
@@ -9,6 +15,8 @@ import type {
 import type { CreateRecipeDTO, ListMyRecipesQueryDTO } from "./recipe.schema.js";
 import {
   BUSINESS_VALIDATION_MESSAGE,
+  RECIPE_ALREADY_APPROVED_MESSAGE,
+  RECIPE_APPROVAL_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
   RecipeService,
 } from "./recipe.service.js";
@@ -44,6 +52,7 @@ function createMockRepository(): {
   readonly create: ReturnType<typeof vi.fn<IRecipeRepository["create"]>>;
   readonly findManyPaginated: ReturnType<typeof vi.fn<IRecipeRepository["findManyPaginated"]>>;
   readonly findById: ReturnType<typeof vi.fn<IRecipeRepository["findById"]>>;
+  readonly approveWithAudit: ReturnType<typeof vi.fn<IRecipeRepository["approveWithAudit"]>>;
 } {
   const create = vi
     .fn<IRecipeRepository["create"]>()
@@ -51,11 +60,13 @@ function createMockRepository(): {
   const findBySlug = vi.fn<IRecipeRepository["findBySlug"]>().mockResolvedValue(null);
   const findManyPaginated = vi.fn<IRecipeRepository["findManyPaginated"]>();
   const findById = vi.fn<IRecipeRepository["findById"]>().mockResolvedValue(null);
+  const approveWithAudit = vi.fn<IRecipeRepository["approveWithAudit"]>();
   return {
-    repository: { create, findById, findBySlug, findManyPaginated },
+    repository: { create, findById, findBySlug, findManyPaginated, approveWithAudit },
     create,
     findManyPaginated,
     findById,
+    approveWithAudit,
   };
 }
 
@@ -414,6 +425,158 @@ describe("RecipeService.getById — detalle público (HU-04)", () => {
 
     // Act
     const err = await captureError(service.getById(RECIPE_ID));
+
+    // Assert
+    expect(err).toBe(failure);
+  });
+});
+
+describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05)", () => {
+  const CHEF: Actor = { id: "44444444-4444-4444-8444-444444444444", role: "CHEF" };
+  const draft = (): RecipeRecord => toRecord(buildRecordInput());
+  const approvedBy = (reviewerId: string): RecipeRecord => ({
+    ...draft(),
+    status: "APPROVED",
+    reviewedById: reviewerId,
+    publishedAt: new Date("2026-11-24T10:00:00.000Z"),
+  });
+
+  it("aprueba una receta DRAFT ajena delegando recipeId y reviewerId del actor", async () => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    const approved = approvedBy(CHEF.id);
+    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approved });
+    const service = new RecipeService(repository);
+
+    // Act
+    const result = await service.approve(CHEF, RECIPE_ID);
+
+    // Assert
+    expect(findById).toHaveBeenCalledWith(RECIPE_ID);
+    expect(approveWithAudit).toHaveBeenCalledWith({ recipeId: RECIPE_ID, reviewerId: CHEF.id });
+    expect(result).toBe(approved);
+  });
+
+  it("acepta también a un NUTRITIONIST y delega su id como revisor", async () => {
+    // Arrange
+    const nutritionist: Actor = { id: "66666666-6666-4666-8666-666666666666", role: "NUTRITIONIST" };
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    const approved = approvedBy(nutritionist.id);
+    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approved });
+    const service = new RecipeService(repository);
+
+    // Act
+    const result = await service.approve(nutritionist, RECIPE_ID);
+
+    // Assert
+    expect(approveWithAudit).toHaveBeenCalledWith({ recipeId: RECIPE_ID, reviewerId: nutritionist.id });
+    expect(result).toBe(approved);
+  });
+
+  it("lanza NotFoundError 404 si la receta no existe, sin escribir", async () => {
+    // Arrange
+    const { repository, approveWithAudit } = createMockRepository();
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(NotFoundError);
+    expect(err).toMatchObject({ statusCode: 404, message: RECIPE_NOT_FOUND_MESSAGE });
+    expect(approveWithAudit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["auto-aprobación de un CHEF (RN-05)", { id: AUTHOR_ID, role: "CHEF" } satisfies Actor],
+    ["auto-aprobación de un NUTRITIONIST (RN-05)", { id: AUTHOR_ID, role: "NUTRITIONIST" } satisfies Actor],
+    ["USER sin rol profesional (RN-04, defensa en profundidad)", { id: CHEF.id, role: "USER" } satisfies Actor],
+    ["ADMIN sin rol profesional (RN-04, defensa en profundidad)", { id: CHEF.id, role: "ADMIN" } satisfies Actor],
+  ])("lanza ForbiddenError 403 por %s, sin escribir", async (_label, actor) => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(actor, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(ForbiddenError);
+    expect(err).toMatchObject({ statusCode: 403, message: RECIPE_APPROVAL_FORBIDDEN_MESSAGE });
+    expect(approveWithAudit).not.toHaveBeenCalled();
+  });
+
+  it("prioriza 403 sobre 409: el Autor no puede aprobar su receta aunque ya esté APPROVED", async () => {
+    // Arrange
+    const { repository, findById } = createMockRepository();
+    findById.mockResolvedValueOnce(approvedBy(CHEF.id));
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve({ id: AUTHOR_ID, role: "CHEF" }, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(ForbiddenError);
+  });
+
+  it("lanza ConflictError 409 si la receta ya está APPROVED, sin escribir (RN-04)", async () => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(approvedBy("55555555-5555-4555-8555-555555555555"));
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(ConflictError);
+    expect(err).toMatchObject({ statusCode: 409, message: RECIPE_ALREADY_APPROVED_MESSAGE });
+    expect(approveWithAudit).not.toHaveBeenCalled();
+  });
+
+  it("lanza ConflictError 409 si la transacción encuentra la receta ya aprobada (aprobación concurrente)", async () => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    approveWithAudit.mockResolvedValueOnce({ outcome: "already_approved" });
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(ConflictError);
+    expect(err).toMatchObject({ statusCode: 409, message: RECIPE_ALREADY_APPROVED_MESSAGE });
+  });
+
+  it("lanza NotFoundError 404 si la transacción ya no encuentra la receta (borrado concurrente)", async () => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    approveWithAudit.mockResolvedValueOnce({ outcome: "not_found" });
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(NotFoundError);
+    expect(err).toMatchObject({ statusCode: 404, message: RECIPE_NOT_FOUND_MESSAGE });
+  });
+
+  it("propaga errores del repositorio sin envolverlos", async () => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    const failure = new Error("timeout");
+    approveWithAudit.mockRejectedValueOnce(failure);
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(CHEF, RECIPE_ID));
 
     // Assert
     expect(err).toBe(failure);

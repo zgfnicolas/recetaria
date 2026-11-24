@@ -2,11 +2,12 @@ import { z } from "zod";
 import { Prisma } from "../../generated/prisma/client.js";
 import type { AppPrismaClient } from "../../infrastructure/database/prisma.js";
 import { AppError, ConflictError, UnauthorizedError } from "../../shared/errors/app-error.js";
-import type {
-  IngredientDTO,
-  NutritionalInfoDTO,
-  RecipeDifficulty,
-  RecipeStatus,
+import {
+  RECIPE_STATUSES,
+  type IngredientDTO,
+  type NutritionalInfoDTO,
+  type RecipeDifficulty,
+  type RecipeStatus,
 } from "./recipe.schema.js";
 
 /** Proyección pública de una Receta persistida. */
@@ -70,11 +71,44 @@ export type PaginatedRecipes = Readonly<{
   meta: PaginationMeta;
 }>;
 
+/** Nombre canónico de la entidad en `audit_logs` (`RN-06`, `ADR-0006`). */
+export const AUDIT_ENTITY_RECIPE = "Recipe";
+
+/** Acciones auditadas sobre Recetas (`RN-06`); `RESET_TO_DRAFT` y `DELETE` llegan en #20/#21. */
+export type RecipeAuditAction = "APPROVE" | "RESET_TO_DRAFT" | "DELETE";
+
+/** Campos del ciclo de vida que cambia una Aprobación (snapshot de `oldValues`/`newValues`). */
+export type RecipeApprovalSnapshot = Readonly<{
+  status: RecipeStatus;
+  reviewedById: string | null;
+  publishedAt: Date | null;
+}>;
+
+export type ApproveWithAuditInput = Readonly<{
+  recipeId: string;
+  reviewerId: string;
+}>;
+
+/**
+ * Resultado de `approveWithAudit`, decidido sobre la fila bloqueada dentro de la transacción:
+ * `not_found` (borrada entre la lectura del servicio y la transacción → `404`) y
+ * `already_approved` (otra aprobación ganó la carrera → `409`).
+ */
+export type ApproveWithAuditResult =
+  | Readonly<{ outcome: "approved"; recipe: RecipeRecord }>
+  | Readonly<{ outcome: "not_found" }>
+  | Readonly<{ outcome: "already_approved" }>;
+
 export interface IRecipeRepository {
   create(data: CreateRecipeRecordInput): Promise<RecipeRecord>;
   findById(id: string): Promise<RecipeRecord | null>;
   findBySlug(slug: string): Promise<RecipeRecord | null>;
   findManyPaginated(params: FindManyPaginatedParams): Promise<PaginatedRecipes>;
+  /**
+   * Aprueba atómicamente (`RN-06`) una Receta **solo si sigue en `DRAFT`** e inserta `APPROVE`
+   * en `audit_logs` con el snapshot real de la fila bloqueada como `oldValues`.
+   */
+  approveWithAudit(input: ApproveWithAuditInput): Promise<ApproveWithAuditResult>;
 }
 
 export const RECIPE_SLUG_CONFLICT_MESSAGE = "Ya existe una receta con ese slug";
@@ -260,6 +294,93 @@ export class RecipeRepository implements IRecipeRepository {
       meta: { page, limit, total, totalPages: calculateTotalPages(total, limit) },
     };
   }
+
+  /**
+   * Transacción interactiva con aislamiento `READ COMMITTED` (por defecto):
+   * 1. `SELECT … FOR UPDATE` bloquea la fila y toma el snapshot real para `oldValues` (una
+   *    aprobación o edición concurrente espera el commit y relee el estado ya confirmado).
+   * 2. `UPDATE` condicional `WHERE id = ? AND status = 'DRAFT'` como guarda adicional (`count`).
+   * Sin `SERIALIZABLE` ni reintentos. Un único `publishedAt` alimenta la fila y `newValues`.
+   */
+  async approveWithAudit(input: ApproveWithAuditInput): Promise<ApproveWithAuditResult> {
+    const publishedAt = new Date();
+    try {
+      return await this.#prisma.$transaction(async (tx): Promise<ApproveWithAuditResult> => {
+        const lockedRows = await tx.$queryRaw<unknown[]>`
+          SELECT status, "reviewedById", "publishedAt" FROM "recipes"
+          WHERE id = ${input.recipeId}::uuid FOR UPDATE`;
+        if (lockedRows.length === 0) {
+          return { outcome: "not_found" };
+        }
+        const previous = parseLockedApprovalSnapshot(lockedRows[0]);
+        if (previous.status !== "DRAFT") {
+          return { outcome: "already_approved" };
+        }
+
+        const { count } = await tx.recipe.updateMany({
+          where: { id: input.recipeId, status: "DRAFT" },
+          data: { status: "APPROVED", reviewedById: input.reviewerId, publishedAt },
+        });
+        if (count === 0) {
+          return { outcome: "already_approved" };
+        }
+
+        await tx.auditLog.create({
+          data: {
+            entityName: AUDIT_ENTITY_RECIPE,
+            entityId: input.recipeId,
+            action: "APPROVE" satisfies RecipeAuditAction,
+            userId: input.reviewerId,
+            oldValues: toApprovalSnapshotJson(previous),
+            newValues: toApprovalSnapshotJson({
+              status: "APPROVED",
+              reviewedById: input.reviewerId,
+              publishedAt,
+            }),
+          },
+        });
+
+        const row = await tx.recipe.findUniqueOrThrow({
+          where: { id: input.recipeId },
+          select: RECIPE_PUBLIC_SELECT,
+        });
+        return { outcome: "approved", recipe: toRecipeRecord(row) };
+      });
+    } catch (err: unknown) {
+      // Revisor con JWT válido pero inexistente en `users` (FK de `reviewedById`/`userId`).
+      if (hasPrismaErrorCode(err, "P2003")) {
+        throw new UnauthorizedError(INVALID_AUTHOR_MESSAGE, { cause: err });
+      }
+      throw err;
+    }
+  }
+}
+
+/** Lectura defensiva de la fila bloqueada (`$queryRaw` no tipa en runtime): inconsistencia → `500`. */
+const lockedApprovalRowSchema = z.object({
+  status: z.enum(RECIPE_STATUSES),
+  reviewedById: z.string().nullable(),
+  publishedAt: z.date().nullable(),
+});
+
+function parseLockedApprovalSnapshot(value: unknown): RecipeApprovalSnapshot {
+  const parsed = lockedApprovalRowSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new AppError(500, "Fila de receta bloqueada con formato inválido", {
+      isOperational: false,
+      cause: parsed.error,
+    });
+  }
+  return parsed.data;
+}
+
+/** Snapshot JSON de auditoría (fechas en ISO 8601) para `oldValues`/`newValues`. */
+function toApprovalSnapshotJson(snapshot: RecipeApprovalSnapshot): Prisma.InputJsonObject {
+  return {
+    status: snapshot.status,
+    reviewedById: snapshot.reviewedById,
+    publishedAt: snapshot.publishedAt === null ? null : snapshot.publishedAt.toISOString(),
+  };
 }
 
 /** Copia solo las claves definidas (sin `undefined`) hacia un objeto JSON de Prisma. */

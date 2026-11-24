@@ -20,12 +20,12 @@ Solo el autor original (`recipe.authorId === req.user.id`) o un usuario con rol 
 ### RN-04 — Validación profesional exclusiva y prevención de doble aprobación
 Únicamente los usuarios autenticados con rol `CHEF` o `NUTRITIONIST` pueden aprobar una receta (`PUT /api/v1/recipes/:id/approve`); un rol `USER` o `ADMIN` recibe `403 Forbidden`. Si la receta ya se encuentra en estado `APPROVED`, el servicio rechaza la operación con `409 Conflict`.
 - Origen: propuesta de valor clínica y gastronómica de Recetaria
-- Se aplica en: `rbacMiddleware(['CHEF', 'NUTRITIONIST'])` y `RecipeService.approve()`
+- Se aplica en: `rbacMiddleware(RECIPE_APPROVER_ROLES)` (`['CHEF', 'NUTRITIONIST']`), la política pura `canApprove()` (`src/modules/recipes/recipe.policy.ts`) y `RecipeService.approve()`; la doble aprobación concurrente se resuelve con el `UPDATE` condicional `status = 'DRAFT'` de `RecipeRepository.approveWithAudit()` (`409`)
 
 ### RN-05 — Separación de funciones en aprobación
 Quien crea una receta no puede aprobarla (`recipe.authorId !== reviewerId`). Cualquier intento de auto-aprobación devuelve `403 Forbidden`.
 - Origen: auditoría independiente y prevención de auto-validación
-- Se aplica en: `RecipeService.approve()`
+- Se aplica en: `canApprove()` + `RecipeService.approve()`, con defensa en profundidad en la base (`CHECK chk_recipes_reviewer_not_author`)
 
 ### RN-06 — Trazabilidad transaccional en cambios críticos
 Las operaciones de aprobación (`APPROVE`), reinicio por edición desde `APPROVED` (`RESET_TO_DRAFT`) y eliminación (`DELETE`) deben ejecutarse dentro de una transacción ACID (`prisma.$transaction`) que garantice consistencia entre `recipes` y `audit_logs` usando siempre `entityName = 'Recipe'`.

@@ -1,4 +1,12 @@
-import { BadRequestError, NotFoundError, type ErrorDetail } from "../../shared/errors/app-error.js";
+import type { Actor } from "../auth/index.js";
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  type ErrorDetail,
+} from "../../shared/errors/app-error.js";
+import { canApprove } from "./recipe.policy.js";
 import {
   MAX_PREP_TIME_MINUTES,
   MIN_PREP_TIME_MINUTES,
@@ -11,6 +19,9 @@ import type { IRecipeRepository, PaginatedRecipes, RecipeRecord } from "./recipe
 
 export const BUSINESS_VALIDATION_MESSAGE = "Error de validación de negocio";
 export const RECIPE_NOT_FOUND_MESSAGE = "Receta no encontrada";
+export const RECIPE_APPROVAL_FORBIDDEN_MESSAGE =
+  "Solo un revisor profesional distinto del autor puede aprobar la receta";
+export const RECIPE_ALREADY_APPROVED_MESSAGE = "La receta ya está aprobada";
 
 export type SlugGenerator = (title: string) => string;
 
@@ -23,6 +34,7 @@ export interface IRecipeService {
   list(query: ListRecipesQueryDTO): Promise<PaginatedRecipes>;
   getMine(authorId: string, query: ListMyRecipesQueryDTO): Promise<PaginatedRecipes>;
   getById(id: string): Promise<RecipeRecord>;
+  approve(actor: Actor, recipeId: string): Promise<RecipeRecord>;
 }
 
 /**
@@ -140,5 +152,38 @@ export class RecipeService implements IRecipeService {
       throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
     }
     return recipe;
+  }
+
+  /**
+   * Aprobación profesional `DRAFT → APPROVED` (`HU-07`): `404` si no existe, `403` si el actor
+   * no es Revisor Profesional o es el Autor (`RN-04`, `RN-05`), `409` si ya está aprobada o si
+   * una aprobación concurrente ganó la carrera (`RN-04`); `404` también si se borró entretanto. Persistencia atómica en `RN-06`.
+   */
+  async approve(actor: Actor, recipeId: string): Promise<RecipeRecord> {
+    const recipe = await this.#recipeRepository.findById(recipeId);
+    if (recipe === null) {
+      throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+    }
+    if (!canApprove(actor, recipe)) {
+      throw new ForbiddenError(RECIPE_APPROVAL_FORBIDDEN_MESSAGE);
+    }
+    if (recipe.status === "APPROVED") {
+      throw new ConflictError(RECIPE_ALREADY_APPROVED_MESSAGE);
+    }
+
+    // El repositorio vuelve a verificar el estado sobre la fila bloqueada (`FOR UPDATE`): cubre
+    // la carrera entre esta lectura y la transacción (aprobación o borrado concurrentes).
+    const result = await this.#recipeRepository.approveWithAudit({
+      recipeId,
+      reviewerId: actor.id,
+    });
+    switch (result.outcome) {
+      case "approved":
+        return result.recipe;
+      case "not_found":
+        throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+      case "already_approved":
+        throw new ConflictError(RECIPE_ALREADY_APPROVED_MESSAGE);
+    }
   }
 }

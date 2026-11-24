@@ -1,14 +1,20 @@
 export { RecipeController } from "./recipe.controller.js";
+export { canApprove, RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
 export {
+  AUDIT_ENTITY_RECIPE,
   INVALID_AUTHOR_MESSAGE,
   RECIPE_SLUG_CONFLICT_MESSAGE,
   RecipeRepository,
   calculateTotalPages,
+  type ApproveWithAuditInput,
+  type ApproveWithAuditResult,
   type CreateRecipeRecordInput,
   type FindManyPaginatedParams,
   type IRecipeRepository,
   type PaginatedRecipes,
   type PaginationMeta,
+  type RecipeApprovalSnapshot,
+  type RecipeAuditAction,
   type RecipeListFilters,
   type RecipeRecord,
 } from "./recipe.repository.js";
@@ -40,6 +46,8 @@ export {
 } from "./recipe.schema.js";
 export {
   BUSINESS_VALIDATION_MESSAGE,
+  RECIPE_ALREADY_APPROVED_MESSAGE,
+  RECIPE_APPROVAL_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
   RecipeService,
   type IRecipeService,
