@@ -103,8 +103,8 @@ describe("parseEnv (validación fail-fast con Zod 4)", () => {
     },
   );
 
-  it.each(["30s", "15m", "2h", "7d", "1w", "1y", "3600s"] as const)(
-    "acepta duración JWT explícita válida (%s)",
+  it.each(["30s", "15m", "2h", "3600s", "86400s", "1440m", "24h", "1d"] as const)(
+    "acepta duración JWT explícita válida hasta el tope de 1d (%s)",
     (duration) => {
       // Arrange
       const source = createValidSource({ JWT_EXPIRES_IN: duration });
@@ -188,6 +188,40 @@ describe("parseEnv (validación fail-fast con Zod 4)", () => {
 
     // Act & Assert
     expect(() => parseEnv(source)).toThrow(/JWT_EXPIRES_IN/);
+    expect(() => parseEnv(source)).not.toThrow(/no puede superar/);
+    if (expiresIn.trim() !== "") {
+      expect(() => parseEnv(source)).toThrow(/formato válido con unidad explícita/);
+    }
+  });
+
+  it.each(["86401s", "1441m", "25h", "2d", "7d", "1w", "1y", "999999y"])(
+    "rechaza fail-fast JWT_EXPIRES_IN = %s por superar el tope de 1d, con mensaje explícito (#52)",
+    (expiresIn) => {
+      // Arrange
+      const source = createValidSource({ JWT_EXPIRES_IN: expiresIn });
+
+      // Act
+      let message = "";
+      try {
+        parseEnv(source);
+      } catch (err: unknown) {
+        message = err instanceof Error ? err.message : String(err);
+      }
+
+      // Assert — distingue "excede el tope" de "formato inválido" y no filtra otras variables
+      expect(message).toContain("JWT_EXPIRES_IN no puede superar 1d (86400 s)");
+      expect(message).not.toContain("formato válido");
+      expect(message).not.toContain(VALID_JWT_SECRET);
+      expect(message).not.toContain(VALID_POSTGRES_URL);
+    },
+  );
+
+  it("aplica el mismo tope en todos los entornos (también en development y test)", () => {
+    for (const nodeEnv of ["development", "test", "production"]) {
+      expect(() => parseEnv(createValidSource({ NODE_ENV: nodeEnv, JWT_EXPIRES_IN: "2d" }))).toThrow(
+        /no puede superar 1d/,
+      );
+    }
   });
 
   it("nunca expone secretos ni credenciales al fallar protocolo de DATABASE_URL o longitud de JWT_SECRET", () => {

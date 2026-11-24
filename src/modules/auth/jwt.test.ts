@@ -12,6 +12,7 @@ import {
   verifyAccessToken,
   type JwtConfig,
 } from "./jwt.js";
+import { MAX_JWT_EXPIRES_IN_SECONDS } from "../../config/jwt-expires-in.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const TEST_JWT_SECRET = "test-jwt-secret-".repeat(3);
@@ -63,6 +64,9 @@ describe("jwt (signAccessToken HS256 y validación fail-closed)", () => {
     { expiresIn: "15m" as const, expectedSeconds: 900 },
     { expiresIn: "1h" as const, expectedSeconds: 3600 },
     { expiresIn: "1d" as const, expectedSeconds: 86_400 },
+    { expiresIn: "86400s" as const, expectedSeconds: 86_400 },
+    { expiresIn: "1440m" as const, expectedSeconds: 86_400 },
+    { expiresIn: "24h" as const, expectedSeconds: 86_400 },
   ])("respeta la ventana de expiración configurada ($expiresIn -> $expectedSeconds s)", ({ expiresIn, expectedSeconds }) => {
     // Arrange
     const config: JwtConfig = { secret: TEST_JWT_SECRET, expiresIn };
@@ -84,6 +88,63 @@ describe("jwt (signAccessToken HS256 y validación fail-closed)", () => {
         expect(verified.exp - verified.iat).toBe(expectedSeconds);
       }
     }
+  });
+
+  it.each(["86401s", "1441m", "25h", "2d", "1w", "1y", "999999y"] as const)(
+    "rechaza fail-closed al firmar una expiración que supera el tope de 1d (%s), aunque la app se arme a mano",
+    (excessive) => {
+      // Arrange
+      const config: JwtConfig = { secret: TEST_JWT_SECRET, expiresIn: excessive };
+
+      // Act & Assert — mensaje de tope (no de formato) y sin filtrar el secreto
+      expect(() => assertValidJwtConfig(config)).toThrow(RangeError);
+      expect(() => assertValidJwtConfig(config)).toThrow(/no puede superar 1d/);
+      expect(() => assertValidJwtConfig(config)).not.toThrow(TEST_JWT_SECRET);
+      expect(() =>
+        signAccessToken({ id: "11111111-1111-4111-8111-111111111111", role: "USER" }, config),
+      ).toThrow(RangeError);
+    },
+  );
+
+  describe("verifyAccessToken — defensa en profundidad del tope (#52)", () => {
+    const ACTOR_ID = "11111111-1111-4111-8111-111111111111";
+    const nowSeconds = (): number => Math.floor(Date.now() / 1000);
+
+    it("rechaza un token firmado con el secreto pero sin exp", () => {
+      const token = jwt.sign({ id: ACTOR_ID, role: "ADMIN" }, TEST_JWT_SECRET, { algorithm: "HS256" });
+      expect(() => verifyAccessToken(token, TEST_JWT_SECRET)).toThrow(UnauthorizedError);
+    });
+
+    it("rechaza un token sin iat aunque tenga exp", () => {
+      const token = jwt.sign(
+        { id: ACTOR_ID, role: "ADMIN", exp: nowSeconds() + 60 },
+        TEST_JWT_SECRET,
+        { algorithm: "HS256", noTimestamp: true },
+      );
+      expect(() => verifyAccessToken(token, TEST_JWT_SECRET)).toThrow(UnauthorizedError);
+    });
+
+    it("rechaza un token con vigencia declarada mayor al tope (exp - iat > 1d), aún no vencido", () => {
+      const token = jwt.sign(
+        { id: ACTOR_ID, role: "ADMIN", exp: nowSeconds() + 7 * 86_400 },
+        TEST_JWT_SECRET,
+        { algorithm: "HS256" },
+      );
+      expect(() => verifyAccessToken(token, TEST_JWT_SECRET)).toThrow(UnauthorizedError);
+    });
+
+    it("rechaza un token con iat más antiguo que el tope (maxAge) aunque su exp siga en el futuro", () => {
+      const iat = nowSeconds() - (MAX_JWT_EXPIRES_IN_SECONDS + 60);
+      const token = jwt.sign({ id: ACTOR_ID, role: "ADMIN", iat, exp: nowSeconds() + 60 }, TEST_JWT_SECRET, {
+        algorithm: "HS256",
+      });
+      expect(() => verifyAccessToken(token, TEST_JWT_SECRET)).toThrow(UnauthorizedError);
+    });
+
+    it("acepta un token emitido con la vigencia máxima permitida (1d)", () => {
+      const token = signAccessToken({ id: ACTOR_ID, role: "CHEF" }, { secret: TEST_JWT_SECRET, expiresIn: "1d" });
+      expect(verifyAccessToken(token, TEST_JWT_SECRET)).toEqual({ id: ACTOR_ID, role: "CHEF" });
+    });
   });
 
   it.each(EXPECTED_MVP_ROLES)("emite JWT verificable preservando el rol %s", (role) => {

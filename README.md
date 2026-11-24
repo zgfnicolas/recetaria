@@ -47,6 +47,8 @@ JWT_EXPIRES_IN="1d"
 TRUST_PROXY=0
 ```
 
+`JWT_EXPIRES_IN` define la vigencia del token (por defecto `1d`). Como la autenticación es stateless y no hay revocación, **el máximo es `1d` (86 400 s)**: un valor mayor (`2d`, `1w`, `1y`, …) hace que la API no arranque y muestre `JWT_EXPIRES_IN no puede superar 1d (86400 s)` (#52). Se aceptan `15m`, `1h`, `12h`, `24h`, `1440m`, `86400s` o `1d`.
+
 `TRUST_PROXY` indica en qué proxies confiar para leer la IP real del cliente desde `X-Forwarded-For` (la usa el rate limit del catálogo):
 - `0` o vacío (por defecto): la API recibe las conexiones directamente; `X-Forwarded-For` se ignora.
 - `1`: hay exactamente un proxy inverso delante (Nginx, Traefik, un balanceador); usar el número **exacto** de saltos (máximo `10`). Un valor mayor que los proxies reales, o `1` con la API expuesta sin proxy, permite que el cliente elija su IP con `X-Forwarded-For`.
