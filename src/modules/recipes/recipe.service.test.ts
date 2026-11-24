@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { BadRequestError, ConflictError } from "../../shared/errors/app-error.js";
+import { BadRequestError, ConflictError, NotFoundError } from "../../shared/errors/app-error.js";
 import type {
   CreateRecipeRecordInput,
   IRecipeRepository,
   PaginatedRecipes,
   RecipeRecord,
 } from "./recipe.repository.js";
-import type { CreateRecipeDTO } from "./recipe.schema.js";
-import { BUSINESS_VALIDATION_MESSAGE, RecipeService } from "./recipe.service.js";
+import type { CreateRecipeDTO, ListMyRecipesQueryDTO } from "./recipe.schema.js";
+import {
+  BUSINESS_VALIDATION_MESSAGE,
+  RECIPE_NOT_FOUND_MESSAGE,
+  RecipeService,
+} from "./recipe.service.js";
 
 const AUTHOR_ID = "11111111-1111-4111-8111-111111111111";
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{8}$/;
@@ -39,13 +43,20 @@ function createMockRepository(): {
   readonly repository: IRecipeRepository;
   readonly create: ReturnType<typeof vi.fn<IRecipeRepository["create"]>>;
   readonly findManyPaginated: ReturnType<typeof vi.fn<IRecipeRepository["findManyPaginated"]>>;
+  readonly findById: ReturnType<typeof vi.fn<IRecipeRepository["findById"]>>;
 } {
   const create = vi
     .fn<IRecipeRepository["create"]>()
     .mockImplementation((input) => Promise.resolve(toRecord(input)));
   const findBySlug = vi.fn<IRecipeRepository["findBySlug"]>().mockResolvedValue(null);
   const findManyPaginated = vi.fn<IRecipeRepository["findManyPaginated"]>();
-  return { repository: { create, findBySlug, findManyPaginated }, create, findManyPaginated };
+  const findById = vi.fn<IRecipeRepository["findById"]>().mockResolvedValue(null);
+  return {
+    repository: { create, findById, findBySlug, findManyPaginated },
+    create,
+    findManyPaginated,
+    findById,
+  };
 }
 
 async function captureError(promise: Promise<unknown>): Promise<unknown> {
@@ -289,6 +300,120 @@ describe("RecipeService.list — catálogo paginado (HU-04)", () => {
 
     // Act
     const err = await captureError(service.list({ page: 1, limit: 20 }));
+
+    // Assert
+    expect(err).toBe(failure);
+  });
+});
+
+const OTHER_AUTHOR_ID = "33333333-3333-4333-8333-333333333333";
+const RECIPE_ID = "22222222-2222-4222-8222-222222222222";
+const EMPTY_PAGE: PaginatedRecipes = {
+  items: [],
+  meta: { page: 1, limit: 20, total: 0, totalPages: 0 },
+};
+
+describe("RecipeService.getMine — recetas propias (HU-04)", () => {
+  it("fuerza authorId al actor autenticado y delega filtros, página y límite", async () => {
+    // Arrange
+    const { repository, findManyPaginated } = createMockRepository();
+    findManyPaginated.mockResolvedValueOnce(EMPTY_PAGE);
+    const service = new RecipeService(repository);
+
+    // Act
+    const result = await service.getMine(AUTHOR_ID, {
+      status: "APPROVED",
+      difficulty: "HARD",
+      page: 3,
+      limit: 10,
+    });
+
+    // Assert
+    expect(findManyPaginated).toHaveBeenCalledWith({
+      filters: { status: "APPROVED", difficulty: "HARD", authorId: AUTHOR_ID },
+      page: 3,
+      limit: 10,
+    });
+    expect(result).toBe(EMPTY_PAGE);
+  });
+
+  it("ignora un authorId ajeno colado en la query: el alcance es siempre el del actor", async () => {
+    // Arrange
+    const { repository, findManyPaginated } = createMockRepository();
+    findManyPaginated.mockResolvedValueOnce(EMPTY_PAGE);
+    const service = new RecipeService(repository);
+    // Intencional: TypeScript solo chequea propiedades de más en literales, no en una variable
+    // intermedia. Así se simula, sin casts, un `authorId` colado que eludió el borde Zod.
+    const smuggled = { page: 1, limit: 20, authorId: OTHER_AUTHOR_ID };
+    const query: ListMyRecipesQueryDTO = smuggled;
+
+    // Act
+    await service.getMine(AUTHOR_ID, query);
+
+    // Assert
+    expect(findManyPaginated).toHaveBeenCalledTimes(1);
+    expect(findManyPaginated.mock.calls[0]?.[0].filters.authorId).toBe(AUTHOR_ID);
+    expect(findManyPaginated).toHaveBeenCalledWith({
+      filters: { status: undefined, difficulty: undefined, authorId: AUTHOR_ID },
+      page: 1,
+      limit: 20,
+    });
+  });
+
+  it("propaga errores del repositorio sin envolverlos", async () => {
+    // Arrange
+    const { repository, findManyPaginated } = createMockRepository();
+    const failure = new Error("timeout");
+    findManyPaginated.mockRejectedValueOnce(failure);
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.getMine(AUTHOR_ID, { page: 1, limit: 20 }));
+
+    // Assert
+    expect(err).toBe(failure);
+  });
+});
+
+describe("RecipeService.getById — detalle público (HU-04)", () => {
+  it("devuelve la Receta encontrada por id", async () => {
+    // Arrange
+    const { repository, findById } = createMockRepository();
+    const recipe = toRecord(buildRecordInput());
+    findById.mockResolvedValueOnce(recipe);
+    const service = new RecipeService(repository);
+
+    // Act
+    const result = await service.getById(RECIPE_ID);
+
+    // Assert
+    expect(findById).toHaveBeenCalledWith(RECIPE_ID);
+    expect(result).toBe(recipe);
+  });
+
+  it("lanza NotFoundError 404 cuando el repositorio devuelve null", async () => {
+    // Arrange
+    const { repository, findById } = createMockRepository();
+    findById.mockResolvedValueOnce(null);
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.getById(RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(NotFoundError);
+    expect(err).toMatchObject({ statusCode: 404, message: RECIPE_NOT_FOUND_MESSAGE });
+  });
+
+  it("propaga errores inesperados del repositorio sin envolverlos", async () => {
+    // Arrange
+    const { repository, findById } = createMockRepository();
+    const failure = new Error("timeout");
+    findById.mockRejectedValueOnce(failure);
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.getById(RECIPE_ID));
 
     // Assert
     expect(err).toBe(failure);

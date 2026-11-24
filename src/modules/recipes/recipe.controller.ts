@@ -2,8 +2,22 @@ import type { NextFunction, Request, Response } from "express";
 import type { ValidatedRequest } from "../../middlewares/validate.middleware.js";
 import { BadRequestError, UnauthorizedError } from "../../shared/errors/app-error.js";
 import { sendSuccess } from "../../shared/http/jsend.js";
-import type { CreateRecipeDTO, ListRecipesQueryDTO } from "./recipe.schema.js";
+import type {
+  CreateRecipeDTO,
+  ListMyRecipesQueryDTO,
+  ListRecipesQueryDTO,
+  RecipeIdParamsDTO,
+} from "./recipe.schema.js";
 import type { IRecipeService } from "./recipe.service.js";
+
+function readValidatedParams<TParams>(req: Request): TParams {
+  const validatedReq = req as Partial<ValidatedRequest<unknown, unknown, TParams>>;
+  const params = validatedReq.valid?.params;
+  if (params === undefined) {
+    throw new BadRequestError("Error de validación");
+  }
+  return params;
+}
 
 function readValidatedQuery<TQuery>(req: Request): TQuery {
   const validatedReq = req as Partial<ValidatedRequest<unknown, TQuery>>;
@@ -65,6 +79,35 @@ export class RecipeController {
         statusCode: 200,
         message: "Recetas obtenidas exitosamente",
         data: page,
+      });
+    } catch (err: unknown) {
+      next(err);
+    }
+  };
+
+  readonly listMine = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const authorId = readActorId(req);
+      const query = readValidatedQuery<ListMyRecipesQueryDTO>(req);
+      const page = await this.#recipeService.getMine(authorId, query);
+      sendSuccess(res, {
+        statusCode: 200,
+        message: "Recetas propias obtenidas exitosamente",
+        data: page,
+      });
+    } catch (err: unknown) {
+      next(err);
+    }
+  };
+
+  readonly getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = readValidatedParams<RecipeIdParamsDTO>(req);
+      const recipe = await this.#recipeService.getById(id);
+      sendSuccess(res, {
+        statusCode: 200,
+        message: "Receta obtenida exitosamente",
+        data: recipe,
       });
     } catch (err: unknown) {
       next(err);

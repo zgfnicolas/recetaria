@@ -4,7 +4,9 @@ import {
   DEFAULT_LIMIT,
   DEFAULT_PAGE,
   DESCRIPTION_MAX_LENGTH,
+  listMyRecipesQuerySchema,
   listRecipesQuerySchema,
+  recipeIdParamsSchema,
   MAX_INGREDIENTS,
   MAX_LIMIT,
   MAX_NUMERIC_AMOUNT,
@@ -341,5 +343,86 @@ describe("listRecipesQuerySchema — paginación y filtros (HU-04)", () => {
     // Assert
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: ["sort"] });
+  });
+});
+
+describe("listMyRecipesQuerySchema — recetas propias (HU-04)", () => {
+  it("aplica los defaults page = 1 y limit = 20 y acepta status y difficulty", () => {
+    expect(listMyRecipesQuerySchema.parse({})).toEqual({ page: DEFAULT_PAGE, limit: DEFAULT_LIMIT });
+    expect(
+      listMyRecipesQuerySchema.parse({ status: "APPROVED", difficulty: "EXPERT", page: "2", limit: "100" }),
+    ).toEqual({ status: "APPROVED", difficulty: "EXPERT", page: 2, limit: 100 });
+  });
+
+  it.each([
+    ["authorId", "6f1c2d3e-4b5a-4c6d-8e7f-0123456789ab"],
+    ["sort", "title"],
+  ])("rechaza el parámetro %s (el alcance lo fija req.user.id, BOLA/BOPLA)", (field, value) => {
+    // Act
+    const result = listMyRecipesQuerySchema.safeParse({ [field]: value });
+
+    // Assert
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: [field] });
+  });
+
+  it.each([
+    ["limit", "101"],
+    ["page", "0"],
+    ["page", "1e1"],
+    ["status", "PUBLISHED"],
+    ["difficulty", ""],
+    ["status", ["DRAFT", "APPROVED"]],
+  ])("rechaza %s = %j", (field, value) => {
+    const result = listMyRecipesQuerySchema.safeParse({ [field]: value });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path.join("."))).toContain(field);
+  });
+
+  it("aplica la ventana page × limit ≤ 10000 (OWASP API4)", () => {
+    expect(listMyRecipesQuerySchema.safeParse({ page: "100", limit: "100" }).success).toBe(true);
+    const result = listMyRecipesQuerySchema.safeParse({ page: "101", limit: "100" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({
+        path: ["page"],
+        message: `page × limit no puede superar ${String(MAX_RESULT_WINDOW)} resultados`,
+      }),
+    ]);
+  });
+});
+
+describe("recipeIdParamsSchema — :id UUID v4 (HU-04)", () => {
+  it.each([
+    "6f1c2d3e-4b5a-4c6d-8e7f-0123456789ab",
+    "6F1C2D3E-4B5A-4C6D-9E7F-0123456789AB",
+  ])("acepta el UUID v4 %s", (id) => {
+    expect(recipeIdParamsSchema.parse({ id })).toEqual({ id });
+  });
+
+  it.each([
+    "mine",
+    "abc",
+    "",
+    "6f1c2d3e-4b5a-1c6d-8e7f-0123456789ab",
+    "0190f2a1-4b5a-7c6d-8e7f-0123456789ab",
+    "6f1c2d3e-4b5a-4c6d-8e7f-0123456789ab0",
+    "00000000-0000-0000-0000-000000000000",
+  ])("rechaza id = %j con mensaje en el campo id", (id) => {
+    // Act
+    const result = recipeIdParamsSchema.safeParse({ id });
+
+    // Assert
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]).toMatchObject({
+      path: ["id"],
+      message: "id debe ser un UUID v4 válido",
+    });
+  });
+
+  it("rechaza claves extra en params (z.strictObject)", () => {
+    const result = recipeIdParamsSchema.safeParse({ id: "6f1c2d3e-4b5a-4c6d-8e7f-0123456789ab", x: "1" });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: ["x"] });
   });
 });

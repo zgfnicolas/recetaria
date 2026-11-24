@@ -1,10 +1,18 @@
 import express, { type RequestHandler, type Router } from "express";
 import { validateMiddleware } from "../../middlewares/validate.middleware.js";
 import type { RecipeController } from "./recipe.controller.js";
-import { createRecipeSchema, listRecipesQuerySchema } from "./recipe.schema.js";
+import {
+  createRecipeSchema,
+  listMyRecipesQuerySchema,
+  listRecipesQuerySchema,
+  recipeIdParamsSchema,
+} from "./recipe.schema.js";
 
 export type RecipeRouterOptions = Readonly<{
-  /** Rate limit por IP del catálogo público (#36); se aplica antes de validar la query. */
+  /**
+   * Rate limit por IP de las lecturas públicas (`GET /` y `GET /:id`, #36 y #18; cuota
+   * compartida); se aplica antes de validar.
+   */
   publicReadLimiter?: RequestHandler | undefined;
 }>;
 
@@ -12,7 +20,8 @@ export type RecipeRouterOptions = Readonly<{
  * Construye el router de recetas bajo `/api/v1/recipes`.
  * Rutas públicas: `[rateLimit →] validateMiddleware → controller`; protegidas:
  * `authGuard → validateMiddleware → controller` (`ADR-0006`).
- * `GET /` se declara antes de las futuras rutas `/mine` y `/:id` (#18).
+ * `GET /mine` se declara **antes** de `GET /:id` para que el literal `"mine"` nunca se
+ * capture como `:id` (#18).
  */
 export function createRecipeRouter(
   controller: RecipeController,
@@ -27,6 +36,18 @@ export function createRecipeRouter(
     ...publicReadGuards,
     validateMiddleware({ query: listRecipesQuerySchema }),
     controller.list,
+  );
+  router.get(
+    "/mine",
+    authGuard,
+    validateMiddleware({ query: listMyRecipesQuerySchema }),
+    controller.listMine,
+  );
+  router.get(
+    "/:id",
+    ...publicReadGuards,
+    validateMiddleware({ params: recipeIdParamsSchema }),
+    controller.getById,
   );
   router.post("/", authGuard, validateMiddleware({ body: createRecipeSchema }), controller.create);
 

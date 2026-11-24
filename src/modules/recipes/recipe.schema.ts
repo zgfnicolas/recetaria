@@ -175,20 +175,52 @@ function positiveIntQueryParam(label: string, max: number, defaultValue: number)
 }
 
 /**
+ * Forma común de filtros escalares y paginación de los listados (`/` y `/mine`).
+ * Se comparte como *shape* porque Zod 4 no permite `.omit()` sobre objetos con `.refine()`.
+ */
+const recipeListBaseShape = {
+  status: z.enum(RECIPE_STATUSES, { error: "Estado inválido" }).optional(),
+  difficulty: z.enum(RECIPE_DIFFICULTIES, { error: "Dificultad inválida" }).optional(),
+  page: positiveIntQueryParam("page", MAX_PAGE, DEFAULT_PAGE),
+  limit: positiveIntQueryParam("limit", MAX_LIMIT, DEFAULT_LIMIT),
+};
+
+/** Ventana máxima `page × limit ≤ MAX_RESULT_WINDOW` (OWASP API4). */
+function isWithinResultWindow(query: Readonly<{ page: number; limit: number }>): boolean {
+  return query.page * query.limit <= MAX_RESULT_WINDOW;
+}
+
+const RESULT_WINDOW_REFINEMENT = {
+  path: ["page"],
+  error: `page × limit no puede superar ${String(MAX_RESULT_WINDOW)} resultados`,
+};
+
+/**
  * Esquema estricto de `req.query` para `GET /api/v1/recipes` (`HU-04`).
  * Rechaza claves desconocidas, valores vacíos y parámetros repetidos con `400`.
  */
 export const listRecipesQuerySchema = z
   .strictObject({
-    status: z.enum(RECIPE_STATUSES, { error: "Estado inválido" }).optional(),
-    difficulty: z.enum(RECIPE_DIFFICULTIES, { error: "Dificultad inválida" }).optional(),
+    ...recipeListBaseShape,
     authorId: z.uuidv4({ error: "authorId debe ser un UUID v4 válido" }).optional(),
-    page: positiveIntQueryParam("page", MAX_PAGE, DEFAULT_PAGE),
-    limit: positiveIntQueryParam("limit", MAX_LIMIT, DEFAULT_LIMIT),
   })
-  .refine((query) => query.page * query.limit <= MAX_RESULT_WINDOW, {
-    path: ["page"],
-    error: `page × limit no puede superar ${String(MAX_RESULT_WINDOW)} resultados`,
-  });
+  .refine(isWithinResultWindow, RESULT_WINDOW_REFINEMENT);
 
 export type ListRecipesQueryDTO = z.infer<typeof listRecipesQuerySchema>;
+
+/**
+ * Esquema estricto de `req.query` para `GET /api/v1/recipes/mine` (`HU-04`).
+ * No admite `authorId`: el alcance lo fija siempre `req.user.id` (prevención BOLA/BOPLA).
+ */
+export const listMyRecipesQuerySchema = z
+  .strictObject(recipeListBaseShape)
+  .refine(isWithinResultWindow, RESULT_WINDOW_REFINEMENT);
+
+export type ListMyRecipesQueryDTO = z.infer<typeof listMyRecipesQuerySchema>;
+
+/** Parámetro de ruta `:id` de una Receta: UUID v4 (`gen_random_uuid()`, `HU-04`). */
+export const recipeIdParamsSchema = z.strictObject({
+  id: z.uuidv4({ error: "id debe ser un UUID v4 válido" }),
+});
+
+export type RecipeIdParamsDTO = z.infer<typeof recipeIdParamsSchema>;

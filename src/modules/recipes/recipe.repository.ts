@@ -72,6 +72,7 @@ export type PaginatedRecipes = Readonly<{
 
 export interface IRecipeRepository {
   create(data: CreateRecipeRecordInput): Promise<RecipeRecord>;
+  findById(id: string): Promise<RecipeRecord | null>;
   findBySlug(slug: string): Promise<RecipeRecord | null>;
   findManyPaginated(params: FindManyPaginatedParams): Promise<PaginatedRecipes>;
 }
@@ -218,6 +219,14 @@ export class RecipeRepository implements IRecipeRepository {
       }
       throw err;
     }
+  }
+
+  async findById(id: string): Promise<RecipeRecord | null> {
+    const row = await this.#prisma.recipe.findUnique({
+      where: { id },
+      select: RECIPE_PUBLIC_SELECT,
+    });
+    return row === null ? null : toRecipeRecord(row);
   }
 
   async findBySlug(slug: string): Promise<RecipeRecord | null> {

@@ -1,14 +1,16 @@
-import { BadRequestError, type ErrorDetail } from "../../shared/errors/app-error.js";
+import { BadRequestError, NotFoundError, type ErrorDetail } from "../../shared/errors/app-error.js";
 import {
   MAX_PREP_TIME_MINUTES,
   MIN_PREP_TIME_MINUTES,
   type CreateRecipeDTO,
+  type ListMyRecipesQueryDTO,
   type ListRecipesQueryDTO,
 } from "./recipe.schema.js";
 import { generateRecipeSlug } from "./recipe.slug.js";
 import type { IRecipeRepository, PaginatedRecipes, RecipeRecord } from "./recipe.repository.js";
 
 export const BUSINESS_VALIDATION_MESSAGE = "Error de validación de negocio";
+export const RECIPE_NOT_FOUND_MESSAGE = "Receta no encontrada";
 
 export type SlugGenerator = (title: string) => string;
 
@@ -19,6 +21,8 @@ export type RecipeServiceOptions = Readonly<{
 export interface IRecipeService {
   create(authorId: string, dto: CreateRecipeDTO): Promise<RecipeRecord>;
   list(query: ListRecipesQueryDTO): Promise<PaginatedRecipes>;
+  getMine(authorId: string, query: ListMyRecipesQueryDTO): Promise<PaginatedRecipes>;
+  getById(id: string): Promise<RecipeRecord>;
 }
 
 /**
@@ -109,5 +113,32 @@ export class RecipeService implements IRecipeService {
       page: query.page,
       limit: query.limit,
     });
+  }
+
+  /**
+   * Lista solo las Recetas del Autor autenticado (`HU-04`). Los filtros se construyen
+   * campo a campo: `authorId` es siempre el del actor y ningún valor de la query puede pisarlo.
+   */
+  async getMine(authorId: string, query: ListMyRecipesQueryDTO): Promise<PaginatedRecipes> {
+    return this.#recipeRepository.findManyPaginated({
+      filters: {
+        status: query.status,
+        difficulty: query.difficulty,
+        authorId,
+      },
+      page: query.page,
+      limit: query.limit,
+    });
+  }
+
+  /**
+   * Detalle público de una Receta (`DRAFT` o `APPROVED`, `docs/roles.md`); `404` si no existe.
+   */
+  async getById(id: string): Promise<RecipeRecord> {
+    const recipe = await this.#recipeRepository.findById(id);
+    if (recipe === null) {
+      throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+    }
+    return recipe;
   }
 }
