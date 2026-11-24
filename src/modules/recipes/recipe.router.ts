@@ -1,6 +1,8 @@
 import express, { type RequestHandler, type Router } from "express";
+import { rbacMiddleware } from "../../middlewares/rbac.middleware.js";
 import { validateMiddleware } from "../../middlewares/validate.middleware.js";
 import type { RecipeController } from "./recipe.controller.js";
+import { RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
 import {
   createRecipeSchema,
   listMyRecipesQuerySchema,
@@ -19,7 +21,7 @@ export type RecipeRouterOptions = Readonly<{
 /**
  * Construye el router de recetas bajo `/api/v1/recipes`.
  * Rutas públicas: `[rateLimit →] validateMiddleware → controller`; protegidas:
- * `authGuard → validateMiddleware → controller` (`ADR-0006`).
+ * `authGuard → [rbacMiddleware →] validateMiddleware → controller` (`ADR-0006`).
  * `GET /mine` se declara **antes** de `GET /:id` para que el literal `"mine"` nunca se
  * capture como `:id` (#18).
  */
@@ -50,6 +52,13 @@ export function createRecipeRouter(
     controller.getById,
   );
   router.post("/", authGuard, validateMiddleware({ body: createRecipeSchema }), controller.create);
+  router.put(
+    "/:id/approve",
+    authGuard,
+    rbacMiddleware(RECIPE_APPROVER_ROLES),
+    validateMiddleware({ params: recipeIdParamsSchema }),
+    controller.approve,
+  );
 
   return router;
 }

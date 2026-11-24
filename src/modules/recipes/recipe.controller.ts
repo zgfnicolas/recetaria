@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import type { ValidatedRequest } from "../../middlewares/validate.middleware.js";
+import type { Actor } from "../auth/index.js";
 import { BadRequestError, UnauthorizedError } from "../../shared/errors/app-error.js";
 import { sendSuccess } from "../../shared/http/jsend.js";
 import type {
@@ -37,12 +38,16 @@ function readValidatedBody<TBody>(req: Request): TBody {
   return body;
 }
 
-function readActorId(req: Request): string {
+function readActor(req: Request): Actor {
   const actor = req.user;
   if (actor === undefined) {
     throw new UnauthorizedError("Autenticación requerida");
   }
-  return actor.id;
+  return actor;
+}
+
+function readActorId(req: Request): string {
+  return readActor(req).id;
 }
 
 /**
@@ -107,6 +112,21 @@ export class RecipeController {
       sendSuccess(res, {
         statusCode: 200,
         message: "Receta obtenida exitosamente",
+        data: recipe,
+      });
+    } catch (err: unknown) {
+      next(err);
+    }
+  };
+
+  readonly approve = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = readActor(req);
+      const { id } = readValidatedParams<RecipeIdParamsDTO>(req);
+      const recipe = await this.#recipeService.approve(actor, id);
+      sendSuccess(res, {
+        statusCode: 200,
+        message: "Receta aprobada exitosamente",
         data: recipe,
       });
     } catch (err: unknown) {

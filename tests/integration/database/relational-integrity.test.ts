@@ -266,7 +266,9 @@ describe("Integridad relacional PostgreSQL 15 — migración inicial", () => {
     it("resuelve el orden del catálogo y de /mine por índice, sin Sort (#36)", async () => {
       // Arrange: con la tabla vacía el planner prefiere Seq/Bitmap Scan; se desactivan para
       // verificar que el índice puede entregar el orden exacto sin un nodo Sort.
-      const authorId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      // `authorId` aleatorio: un UUID fijo compartido con otras suites puede quedar como valor
+      // más común en `pg_stats` tras un autoanalyze y volver no determinista la elección del índice.
+      const authorId = randomUUID();
 
       // Act
       const plans = await db.prisma.$transaction(async (tx) => {

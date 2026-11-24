@@ -5,6 +5,7 @@ import type { Actor } from "../auth/index.js";
 import {
   BadRequestError,
   ConflictError,
+  ForbiddenError,
   NotFoundError,
   UnauthorizedError,
 } from "../../shared/errors/app-error.js";
@@ -66,6 +67,7 @@ function createHarness(options: {
   app.get("/recipes", controller.list);
   app.get("/recipes/mine", controller.listMine);
   app.get("/recipes/:id", controller.getById);
+  app.put("/recipes/:id/approve", controller.approve);
   app.use(
     (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       nextErrors.push(err);
@@ -89,12 +91,21 @@ function createMockService(): {
   readonly list: ReturnType<typeof vi.fn<IRecipeService["list"]>>;
   readonly getMine: ReturnType<typeof vi.fn<IRecipeService["getMine"]>>;
   readonly getById: ReturnType<typeof vi.fn<IRecipeService["getById"]>>;
+  readonly approve: ReturnType<typeof vi.fn<IRecipeService["approve"]>>;
 } {
   const create = vi.fn<IRecipeService["create"]>().mockResolvedValue(PERSISTED);
   const list = vi.fn<IRecipeService["list"]>();
   const getMine = vi.fn<IRecipeService["getMine"]>();
   const getById = vi.fn<IRecipeService["getById"]>().mockResolvedValue(PERSISTED);
-  return { service: { create, list, getMine, getById }, create, list, getMine, getById };
+  const approve = vi.fn<IRecipeService["approve"]>().mockResolvedValue(PERSISTED);
+  return {
+    service: { create, list, getMine, getById, approve },
+    create,
+    list,
+    getMine,
+    getById,
+    approve,
+  };
 }
 
 describe("RecipeController.create", () => {
@@ -359,4 +370,84 @@ describe("RecipeController.getById", () => {
       expect(nextErrors).toEqual([failure]);
     },
   );
+});
+
+describe("RecipeController.approve", () => {
+  const REVIEWER: Actor = Object.freeze({ id: "44444444-4444-4444-8444-444444444444", role: "CHEF" });
+
+  it("usa req.user completo y req.valid.params.id y responde 200 JSend con la Receta Aprobada", async () => {
+    // Arrange
+    const { service, approve } = createMockService();
+    const approved: RecipeRecord = { ...PERSISTED, status: "APPROVED", reviewedById: REVIEWER.id };
+    approve.mockResolvedValueOnce(approved);
+    const { app, nextErrors } = createHarness({
+      service,
+      user: REVIEWER,
+      valid: { params: { id: PERSISTED.id } },
+    });
+
+    // Act
+    const res = await request(app).put("/recipes/no-es-el-id-validado/approve");
+
+    // Assert
+    expect(nextErrors).toEqual([]);
+    expect(approve).toHaveBeenCalledWith(REVIEWER, PERSISTED.id);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      statusCode: 200,
+      message: "Receta aprobada exitosamente",
+      data: JSON.parse(JSON.stringify(approved)),
+    });
+  });
+
+  it("falla cerrado con 401 si falta req.user sin invocar al servicio", async () => {
+    // Arrange
+    const { service, approve } = createMockService();
+    const { app, nextErrors } = createHarness({ service, valid: { params: { id: PERSISTED.id } } });
+
+    // Act
+    const res = await request(app).put(`/recipes/${PERSISTED.id}/approve`);
+
+    // Assert
+    expect(res.status).toBe(401);
+    expect(nextErrors[0]).toBeInstanceOf(UnauthorizedError);
+    expect(approve).not.toHaveBeenCalled();
+  });
+
+  it("falla cerrado con 400 si falta req.valid.params sin invocar al servicio", async () => {
+    // Arrange
+    const { service, approve } = createMockService();
+    const { app, nextErrors } = createHarness({ service, user: REVIEWER });
+
+    // Act
+    const res = await request(app).put(`/recipes/${PERSISTED.id}/approve`);
+
+    // Assert
+    expect(res.status).toBe(400);
+    expect(nextErrors[0]).toBeInstanceOf(BadRequestError);
+    expect(approve).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new NotFoundError("Receta no encontrada"),
+    new ForbiddenError("prohibido"),
+    new ConflictError("La receta ya está aprobada"),
+    new Error("inesperado"),
+  ])("delega en next(err) los errores del servicio: %s", async (failure) => {
+    // Arrange
+    const { service, approve } = createMockService();
+    approve.mockRejectedValueOnce(failure);
+    const { app, nextErrors } = createHarness({
+      service,
+      user: REVIEWER,
+      valid: { params: { id: PERSISTED.id } },
+    });
+
+    // Act
+    await request(app).put(`/recipes/${PERSISTED.id}/approve`);
+
+    // Assert
+    expect(nextErrors).toEqual([failure]);
+  });
 });
