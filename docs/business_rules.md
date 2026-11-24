@@ -18,9 +18,14 @@ Solo el autor original (`recipe.authorId === req.user.id`) o un usuario con rol 
 - Se aplica en: la política pura `canDelete()` (`src/modules/recipes/recipe.policy.ts`), `RecipeService.delete()` y `RecipeRepository.deleteWithAudit()`
 
 ### RN-04 — Validación profesional exclusiva y prevención de doble aprobación
-Únicamente los usuarios autenticados con rol `CHEF` o `NUTRITIONIST` pueden aprobar una receta (`PUT /api/v1/recipes/:id/approve`); un rol `USER` o `ADMIN` recibe `403 Forbidden`. Si la receta ya se encuentra en estado `APPROVED`, el servicio rechaza la operación con `409 Conflict`.
+Únicamente los usuarios autenticados con rol `CHEF` o `NUTRITIONIST` pueden aprobar una receta (`PUT /api/v1/recipes/:id/approve`); un rol `USER` o `ADMIN` recibe `403 Forbidden`. Si la receta ya se encuentra en estado `APPROVED`, el servicio rechaza la operación con `409 Conflict`. **Bloqueo optimista (#46):** la aprobación exige el header `If-Match` con el `ETag` fuerte de la versión revisada (lo devuelve `GET /api/v1/recipes/:id`):
+  - sin `If-Match`, o con `*`, responde `428 Precondition Required` antes de consultar la base;
+  - con una sintaxis inválida, responde `400`;
+  - si la versión ya no es la vigente, responde `412 Precondition Failed` sin escribir. Así nunca se aprueba un contenido distinto del que el revisor leyó.
+
+  La versión se verifica sobre la fila bloqueada (`SELECT … FOR UPDATE`). Orden de guardas: `401` → `403` RBAC → `428` → `400` → `404` → `403` (`RN-05`) → `412` → `409`.
 - Origen: propuesta de valor clínica y gastronómica de Recetaria
-- Se aplica en: `rbacMiddleware(RECIPE_APPROVER_ROLES)` (`['CHEF', 'NUTRITIONIST']`), la política pura `canApprove()` (`src/modules/recipes/recipe.policy.ts`) y `RecipeService.approve()`; la doble aprobación concurrente se resuelve con el `UPDATE` condicional `status = 'DRAFT'` de `RecipeRepository.approveWithAudit()` (`409`)
+- Se aplica en: `rbacMiddleware(RECIPE_APPROVER_ROLES)` (`['CHEF', 'NUTRITIONIST']`), la política pura `canApprove()` (`src/modules/recipes/recipe.policy.ts`), `requireIfMatchMiddleware({ singleTag: true })` (un único ETag; una lista → `400`) y `RecipeService.approve()`. La versión y el estado se verifican sobre la fila bloqueada en `RecipeRepository.approveWithAudit()` (`412`/`409`), con el `UPDATE` condicional `status = 'DRAFT'` como guarda adicional
 
 ### RN-05 — Separación de funciones en aprobación
 Quien crea una receta no puede aprobarla (`recipe.authorId !== reviewerId`). Cualquier intento de auto-aprobación devuelve `403 Forbidden`.

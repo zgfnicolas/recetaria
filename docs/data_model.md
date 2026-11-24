@@ -1,6 +1,6 @@
 # Modelo de datos
 
-Fuente DDL operativa del esquema: [`prisma/schema.prisma`](../prisma/schema.prisma) (Prisma 7) junto con las migraciones SQL versionadas de Prisma (`20261121201424_init` y `20261123145000_recipes_list_order_indexes`). El archivo [`database_schema_init.sql`](../database_schema_init.sql) se conserva como referencia inicial histórica (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y usuarios semilla de referencia para los 4 roles RBAC.
+Fuente DDL operativa del esquema: [`prisma/schema.prisma`](../prisma/schema.prisma) (Prisma 7) junto con las migraciones SQL versionadas de Prisma (`20261121201424_init`, `20261123145000_recipes_list_order_indexes` y `20261124160000_recipes_version`). El archivo [`database_schema_init.sql`](../database_schema_init.sql) se conserva como referencia inicial histórica (motor PostgreSQL 15, normalización 3NF con columnas `JSONB` para ingredientes y metadatos nutricionales). Incluye 3 modelos activos (`User`, `Recipe`, `AuditLog`) y usuarios semilla de referencia para los 4 roles RBAC.
 
 ## Diagrama ER
 ```mermaid
@@ -95,6 +95,7 @@ Entidad principal con el contenido, metadatos nutricionales y estado de validaci
 | `authorId` | `UUID (FK)` | No | Autor que creó la receta (`-> users.id`) |
 | `reviewedById` | `UUID (FK)` | Sí | Profesional que aprobó la receta (`-> users.id`), con `CHECK ("reviewedById" IS NULL OR "reviewedById" <> "authorId")` (`RN-05`) |
 | `publishedAt` | `TIMESTAMPTZ` | Sí | Fecha y hora de aprobación |
+| `version` | `INTEGER` | No | Versión de contenido para `ETag`/`If-Match` (#46), por defecto `1`; la incrementa `trg_recipes_version` en cada `UPDATE` y no se expone en el JSON |
 | `createdAt` | `TIMESTAMPTZ` | No | Fecha de creación (`NOW()`) |
 | `updatedAt` | `TIMESTAMPTZ` | No | Última actualización (trigger automático) |
 
@@ -119,8 +120,9 @@ Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO
   - `chk_prep_time_positive`: `CHECK ("prepTimeMinutes" > 0 AND "prepTimeMinutes" <= 1440)` (`RN-07`).
   - `chk_recipes_reviewer_not_author`: `CHECK ("reviewedById" IS NULL OR "reviewedById" <> "authorId")` (`RN-05`).
   - `chk_recipes_ingredients_array`: `CHECK (jsonb_typeof("ingredients") = 'array')`.
+  - `chk_recipes_version_positive`: `CHECK ("version" >= 1)` (#46).
   - `chk_recipes_nutritional_info_object`: `CHECK ("nutritionalInfo" IS NULL OR jsonb_typeof("nutritionalInfo") = 'object')` *(en Prisma usar `Prisma.DbNull` para limpiar la columna a SQL `NULL`; `Prisma.JsonNull` escribe JSON `'null'` y es rechazado por el `CHECK`)*.
-- **Triggers:** `trg_users_updated_at` y `trg_recipes_updated_at` ejecutan `update_updated_at_column()` en `BEFORE UPDATE` para actualizar `"updatedAt" = NOW()`.
+- **Triggers:** `trg_users_updated_at` y `trg_recipes_updated_at` ejecutan `update_updated_at_column()` en `BEFORE UPDATE` para actualizar `"updatedAt" = NOW()`. `trg_recipes_version` ejecuta `increment_recipe_version()` en `BEFORE UPDATE` (`NEW."version" = OLD."version" + 1`, ignorando cualquier valor enviado; migración `20261124160000_recipes_version`, #46).
 - **Seed inicial:** [`prisma/seed.ts`](../prisma/seed.ts) (vía `npx prisma db seed` o `npm run db:seed` con `tsx`) siembra de forma idempotente (`createMany` con `skipDuplicates: true`, `ON CONFLICT DO NOTHING`) los 4 usuarios base RBAC (`user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com`, `admin@recetaria.com`) con `isActive = true`, Bcrypt (`>= 10` rounds, `RN-08`) y guarda *allowlist* en `NODE_ENV=development|test` (bloqueado en producción y otros entornos). [`database_schema_init.sql`](../database_schema_init.sql) conserva los mismos 4 perfiles como referencia histórica.
 
 ## Políticas referenciales

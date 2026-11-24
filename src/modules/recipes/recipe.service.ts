@@ -4,8 +4,11 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  PreconditionFailedError,
   type ErrorDetail,
 } from "../../shared/errors/app-error.js";
+import type { EntityTag } from "../../shared/http/entity-tag.js";
+import { toRecipeVersions } from "./recipe.etag.js";
 import { canApprove, canDelete, canEdit } from "./recipe.policy.js";
 import {
   MAX_PREP_TIME_MINUTES,
@@ -22,6 +25,7 @@ import type {
   PaginatedRecipes,
   RecipeRecord,
   UpdateRecipeChanges,
+  VersionedRecipe,
 } from "./recipe.repository.js";
 
 export const BUSINESS_VALIDATION_MESSAGE = "Error de validación de negocio";
@@ -29,6 +33,8 @@ export const RECIPE_NOT_FOUND_MESSAGE = "Receta no encontrada";
 export const RECIPE_APPROVAL_FORBIDDEN_MESSAGE =
   "Solo un revisor profesional distinto del autor puede aprobar la receta";
 export const RECIPE_ALREADY_APPROVED_MESSAGE = "La receta ya está aprobada";
+export const RECIPE_VERSION_MISMATCH_MESSAGE =
+  "La receta cambió desde la versión revisada; vuelva a consultarla antes de aprobar";
 export const RECIPE_EDIT_FORBIDDEN_MESSAGE = "Solo el autor puede editar la receta";
 export const RECIPE_DELETE_FORBIDDEN_MESSAGE =
   "Solo el autor o un administrador pueden eliminar la receta";
@@ -46,9 +52,9 @@ export interface IRecipeService {
   create(authorId: string, dto: CreateRecipeDTO): Promise<RecipeRecord>;
   list(query: ListRecipesQueryDTO): Promise<PaginatedRecipes>;
   getMine(authorId: string, query: ListMyRecipesQueryDTO): Promise<PaginatedRecipes>;
-  getById(id: string): Promise<RecipeRecord>;
-  approve(actor: Actor, recipeId: string): Promise<RecipeRecord>;
-  update(actor: Actor, recipeId: string, dto: UpdateRecipeDTO): Promise<RecipeRecord>;
+  getById(id: string): Promise<VersionedRecipe>;
+  approve(actor: Actor, recipeId: string, ifMatch: readonly EntityTag[]): Promise<VersionedRecipe>;
+  update(actor: Actor, recipeId: string, dto: UpdateRecipeDTO): Promise<VersionedRecipe>;
   delete(actor: Actor, recipeId: string): Promise<DeletedRecipe>;
 }
 
@@ -170,42 +176,56 @@ export class RecipeService implements IRecipeService {
   /**
    * Detalle público de una Receta (`DRAFT` o `APPROVED`, `docs/roles.md`); `404` si no existe.
    */
-  async getById(id: string): Promise<RecipeRecord> {
-    const recipe = await this.#recipeRepository.findById(id);
-    if (recipe === null) {
+  async getById(id: string): Promise<VersionedRecipe> {
+    const found = await this.#recipeRepository.findByIdWithVersion(id);
+    if (found === null) {
       throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
     }
-    return recipe;
+    return found;
   }
 
   /**
    * Aprobación profesional `DRAFT → APPROVED` (`HU-07`): `404` si no existe, `403` si el actor
-   * no es Revisor Profesional o es el Autor (`RN-04`, `RN-05`), `409` si ya está aprobada o si
-   * una aprobación concurrente ganó la carrera (`RN-04`); `404` también si se borró entretanto. Persistencia atómica en `RN-06`.
+   * no es Revisor Profesional o es el Autor (`RN-04`, `RN-05`), `412` si `If-Match` no contiene la
+   * versión vigente (bloqueo optimista #46; también el perdedor de una aprobación concurrente) y
+   * `409` si ya está aprobada con la versión vigente (`RN-04`); `404` también si se borró
+   * entretanto. Persistencia atómica en `RN-06`.
    */
-  async approve(actor: Actor, recipeId: string): Promise<RecipeRecord> {
-    const recipe = await this.#recipeRepository.findById(recipeId);
-    if (recipe === null) {
+  async approve(
+    actor: Actor,
+    recipeId: string,
+    ifMatch: readonly EntityTag[],
+  ): Promise<VersionedRecipe> {
+    const found = await this.#recipeRepository.findByIdWithVersion(recipeId);
+    if (found === null) {
       throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
     }
-    if (!canApprove(actor, recipe)) {
+    if (!canApprove(actor, found.recipe)) {
       throw new ForbiddenError(RECIPE_APPROVAL_FORBIDDEN_MESSAGE);
     }
-    if (recipe.status === "APPROVED") {
+    // Bloqueo optimista (#46): `412` antes que `409`; la versión revisada debe ser la vigente.
+    const expectedVersions = toRecipeVersions(ifMatch);
+    if (!expectedVersions.includes(found.version)) {
+      throw new PreconditionFailedError(RECIPE_VERSION_MISMATCH_MESSAGE);
+    }
+    if (found.recipe.status === "APPROVED") {
       throw new ConflictError(RECIPE_ALREADY_APPROVED_MESSAGE);
     }
 
-    // El repositorio vuelve a verificar el estado sobre la fila bloqueada (`FOR UPDATE`): cubre
-    // la carrera entre esta lectura y la transacción (aprobación o borrado concurrentes).
+    // El repositorio vuelve a verificar versión y estado sobre la fila bloqueada (`FOR UPDATE`):
+    // cubre la carrera con ediciones, aprobaciones o borrados concurrentes posteriores a esta lectura.
     const result = await this.#recipeRepository.approveWithAudit({
       recipeId,
       reviewerId: actor.id,
+      expectedVersions,
     });
     switch (result.outcome) {
       case "approved":
-        return result.recipe;
+        return { recipe: result.recipe, version: result.version };
       case "not_found":
         throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+      case "precondition_failed":
+        throw new PreconditionFailedError(RECIPE_VERSION_MISMATCH_MESSAGE);
       case "already_approved":
         throw new ConflictError(RECIPE_ALREADY_APPROVED_MESSAGE);
     }
@@ -217,7 +237,7 @@ export class RecipeService implements IRecipeService {
    * regenerado solo si llega `title`. El reinicio a `DRAFT` + `RESET_TO_DRAFT` lo decide el
    * repositorio sobre la fila bloqueada (`RN-06`).
    */
-  async update(actor: Actor, recipeId: string, dto: UpdateRecipeDTO): Promise<RecipeRecord> {
+  async update(actor: Actor, recipeId: string, dto: UpdateRecipeDTO): Promise<VersionedRecipe> {
     const recipe = await this.#recipeRepository.findById(recipeId);
     if (recipe === null) {
       throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
@@ -239,7 +259,7 @@ export class RecipeService implements IRecipeService {
     if (result.outcome === "not_found") {
       throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
     }
-    return result.recipe;
+    return { recipe: result.recipe, version: result.version };
   }
 
   /**

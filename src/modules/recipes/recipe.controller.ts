@@ -1,7 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
+import { IF_MATCH_REQUIRED_MESSAGE } from "../../middlewares/if-match.middleware.js";
 import type { ValidatedRequest } from "../../middlewares/validate.middleware.js";
+import type { EntityTag } from "../../shared/http/entity-tag.js";
+import { formatRecipeETag } from "./recipe.etag.js";
 import type { Actor } from "../auth/index.js";
-import { BadRequestError, UnauthorizedError } from "../../shared/errors/app-error.js";
+import {
+  BadRequestError,
+  PreconditionRequiredError,
+  UnauthorizedError,
+} from "../../shared/errors/app-error.js";
 import { sendSuccess } from "../../shared/http/jsend.js";
 import type {
   CreateRecipeDTO,
@@ -37,6 +44,15 @@ function readValidatedBody<TBody>(req: Request): TBody {
     throw new BadRequestError("Error de validación");
   }
   return body;
+}
+
+/** Lee el `If-Match` validado por `requireIfMatchMiddleware`; falla cerrado con `428` si falta. */
+function readIfMatch(req: Request): readonly EntityTag[] {
+  const ifMatch = req.preconditions?.ifMatch;
+  if (ifMatch === undefined) {
+    throw new PreconditionRequiredError(IF_MATCH_REQUIRED_MESSAGE);
+  }
+  return ifMatch;
 }
 
 function readActor(req: Request): Actor {
@@ -109,7 +125,9 @@ export class RecipeController {
   readonly getById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = readValidatedParams<RecipeIdParamsDTO>(req);
-      const recipe = await this.#recipeService.getById(id);
+      const { recipe, version } = await this.#recipeService.getById(id);
+      // `ETag` fuerte explícito: Express no lo pisa y resuelve `If-None-Match` → `304`.
+      res.setHeader("ETag", formatRecipeETag(version));
       sendSuccess(res, {
         statusCode: 200,
         message: "Receta obtenida exitosamente",
@@ -125,7 +143,8 @@ export class RecipeController {
       const actor = readActor(req);
       const { id } = readValidatedParams<RecipeIdParamsDTO>(req);
       const body = readValidatedBody<UpdateRecipeDTO>(req);
-      const recipe = await this.#recipeService.update(actor, id, body);
+      const { recipe, version } = await this.#recipeService.update(actor, id, body);
+      res.setHeader("ETag", formatRecipeETag(version));
       sendSuccess(res, {
         statusCode: 200,
         message: "Receta actualizada exitosamente",
@@ -155,7 +174,9 @@ export class RecipeController {
     try {
       const actor = readActor(req);
       const { id } = readValidatedParams<RecipeIdParamsDTO>(req);
-      const recipe = await this.#recipeService.approve(actor, id);
+      const ifMatch = readIfMatch(req);
+      const { recipe, version } = await this.#recipeService.approve(actor, id, ifMatch);
+      res.setHeader("ETag", formatRecipeETag(version));
       sendSuccess(res, {
         statusCode: 200,
         message: "Receta aprobada exitosamente",

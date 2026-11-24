@@ -232,6 +232,7 @@ describe("Rate limit del catálogo público GET /api/v1/recipes (#36, OWASP API4
       "RateLimit",
       "RateLimit-Policy",
       "Retry-After",
+      "ETag",
     ]);
   });
 

@@ -84,19 +84,27 @@ export type RecipeApprovalSnapshot = Readonly<{
   publishedAt: Date | null;
 }>;
 
+/** Receta junto con su versión de contenido (`ETag`, #46); la versión nunca viaja en el JSON. */
+export type VersionedRecipe = Readonly<{ recipe: RecipeRecord; version: number }>;
+
 export type ApproveWithAuditInput = Readonly<{
   recipeId: string;
   reviewerId: string;
+  /** Versiones aceptadas por el `If-Match` del revisor (bloqueo optimista, #46). */
+  expectedVersions: readonly number[];
 }>;
 
 /**
  * Resultado de `approveWithAudit`, decidido sobre la fila bloqueada dentro de la transacción:
- * `not_found` (borrada entre la lectura del servicio y la transacción → `404`) y
- * `already_approved` (otra aprobación ganó la carrera → `409`).
+ * `not_found` (borrada entre la lectura del servicio y la transacción → `404`),
+ * `precondition_failed` (la versión revisada ya no es la vigente → `412`) y
+ * `already_approved` (guarda defensiva → `409`: casi inalcanzable, porque una aprobación previa
+ * incrementa la versión y el perdedor de una carrera recibe `precondition_failed`).
  */
 export type ApproveWithAuditResult =
-  | Readonly<{ outcome: "approved"; recipe: RecipeRecord }>
+  | Readonly<{ outcome: "approved"; recipe: RecipeRecord; version: number }>
   | Readonly<{ outcome: "not_found" }>
+  | Readonly<{ outcome: "precondition_failed" }>
   | Readonly<{ outcome: "already_approved" }>;
 
 /**
@@ -127,7 +135,7 @@ export type UpdateWithOptionalResetInput = Readonly<{
  * indica si estaba `APPROVED` y se reinició con `RESET_TO_DRAFT`; `not_found` → `404`.
  */
 export type UpdateWithOptionalResetResult =
-  | Readonly<{ outcome: "updated"; recipe: RecipeRecord; resetToDraft: boolean }>
+  | Readonly<{ outcome: "updated"; recipe: RecipeRecord; version: number; resetToDraft: boolean }>
   | Readonly<{ outcome: "not_found" }>;
 
 export type DeleteWithAuditInput = Readonly<{
@@ -148,6 +156,8 @@ export type RecipeDeletionSnapshot = Readonly<{
 export interface IRecipeRepository {
   create(data: CreateRecipeRecordInput): Promise<RecipeRecord>;
   findById(id: string): Promise<RecipeRecord | null>;
+  /** Detalle con su versión de contenido para el `ETag` (#46). */
+  findByIdWithVersion(id: string): Promise<VersionedRecipe | null>;
   findBySlug(slug: string): Promise<RecipeRecord | null>;
   findManyPaginated(params: FindManyPaginatedParams): Promise<PaginatedRecipes>;
   /**
@@ -191,6 +201,14 @@ const RECIPE_PUBLIC_SELECT = {
 } as const satisfies Prisma.RecipeSelect;
 
 type RecipeRow = Prisma.RecipeGetPayload<{ select: typeof RECIPE_PUBLIC_SELECT }>;
+
+/** Proyección pública + `version` (uso interno para el `ETag`; no se serializa en el JSON). */
+const RECIPE_VERSIONED_SELECT = {
+  ...RECIPE_PUBLIC_SELECT,
+  version: true,
+} as const satisfies Prisma.RecipeSelect;
+
+type VersionedRecipeRow = Prisma.RecipeGetPayload<{ select: typeof RECIPE_VERSIONED_SELECT }>;
 
 /** Orden determinístico: `id` desempata recetas con el mismo `createdAt` (sin duplicados ni saltos). */
 const RECIPE_LIST_ORDER_BY = [
@@ -259,6 +277,12 @@ function toRecipeRecord(row: RecipeRow): RecipeRecord {
   };
 }
 
+/** Separa la versión antes de mapear: `version` no debe filtrarse al cuerpo JSON público. */
+function toVersionedRecipe(row: VersionedRecipeRow): VersionedRecipe {
+  const { version, ...publicRow } = row;
+  return { recipe: toRecipeRecord(publicRow), version };
+}
+
 function hasPrismaErrorCode(err: unknown, code: string): boolean {
   return typeof err === "object" && err !== null && "code" in err && err.code === code;
 }
@@ -309,6 +333,14 @@ export class RecipeRepository implements IRecipeRepository {
       }
       throw err;
     }
+  }
+
+  async findByIdWithVersion(id: string): Promise<VersionedRecipe | null> {
+    const row = await this.#prisma.recipe.findUnique({
+      where: { id },
+      select: RECIPE_VERSIONED_SELECT,
+    });
+    return row === null ? null : toVersionedRecipe(row);
   }
 
   async findById(id: string): Promise<RecipeRecord | null> {
@@ -366,6 +398,11 @@ export class RecipeRepository implements IRecipeRepository {
         if (previous === null) {
           return { outcome: "not_found" };
         }
+        // Verificación autoritativa del `If-Match` sobre la fila bloqueada: una edición confirmada
+        // mientras esta aprobación esperaba el lock ya incrementó la versión (`trg_recipes_version`).
+        if (!input.expectedVersions.includes(previous.version)) {
+          return { outcome: "precondition_failed" };
+        }
         if (previous.status !== "DRAFT") {
           return { outcome: "already_approved" };
         }
@@ -395,9 +432,9 @@ export class RecipeRepository implements IRecipeRepository {
 
         const row = await tx.recipe.findUniqueOrThrow({
           where: { id: input.recipeId },
-          select: RECIPE_PUBLIC_SELECT,
+          select: RECIPE_VERSIONED_SELECT,
         });
-        return { outcome: "approved", recipe: toRecipeRecord(row) };
+        return { outcome: "approved", ...toVersionedRecipe(row) };
       });
     } catch (err: unknown) {
       // Revisor con JWT válido pero inexistente en `users` (FK de `reviewedById`/`userId`).
@@ -429,7 +466,7 @@ export class RecipeRepository implements IRecipeRepository {
           data: resetToDraft
             ? { ...toRecipeUpdateData(input.changes), status: "DRAFT", reviewedById: null, publishedAt: null }
             : toRecipeUpdateData(input.changes),
-          select: RECIPE_PUBLIC_SELECT,
+          select: RECIPE_VERSIONED_SELECT,
         });
 
         if (resetToDraft) {
@@ -448,7 +485,7 @@ export class RecipeRepository implements IRecipeRepository {
           });
         }
 
-        return { outcome: "updated", recipe: toRecipeRecord(row), resetToDraft };
+        return { outcome: "updated", ...toVersionedRecipe(row), resetToDraft };
       });
     } catch (err: unknown) {
       // Sin rama `P2003`: el actor es siempre el Autor y `fk_recipes_author` (`RESTRICT`) impide
@@ -537,9 +574,9 @@ async function lockRecipeForDelete(
 async function lockRecipeLifecycle(
   tx: TransactionClient,
   recipeId: string,
-): Promise<RecipeApprovalSnapshot | null> {
+): Promise<LockedRecipeLifecycle | null> {
   const lockedRows = await tx.$queryRaw<unknown[]>`
-    SELECT status, "reviewedById", "publishedAt" FROM "recipes"
+    SELECT status, "reviewedById", "publishedAt", "version" FROM "recipes"
     WHERE id = ${recipeId}::uuid FOR UPDATE`;
   return lockedRows.length === 0 ? null : parseLockedApprovalSnapshot(lockedRows[0]);
 }
@@ -575,9 +612,13 @@ const lockedApprovalRowSchema = z.object({
   status: z.enum(RECIPE_STATUSES),
   reviewedById: z.string().nullable(),
   publishedAt: z.date().nullable(),
+  version: z.int().min(1),
 });
 
-function parseLockedApprovalSnapshot(value: unknown): RecipeApprovalSnapshot {
+/** Estado de ciclo de vida bloqueado más su versión de contenido (#46). */
+type LockedRecipeLifecycle = RecipeApprovalSnapshot & Readonly<{ version: number }>;
+
+function parseLockedApprovalSnapshot(value: unknown): LockedRecipeLifecycle {
   const parsed = lockedApprovalRowSchema.safeParse(value);
   if (!parsed.success) {
     throw new AppError(500, "Fila de receta bloqueada con formato inválido", {

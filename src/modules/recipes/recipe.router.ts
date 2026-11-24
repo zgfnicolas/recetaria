@@ -1,4 +1,5 @@
 import express, { type RequestHandler, type Router } from "express";
+import { requireIfMatchMiddleware } from "../../middlewares/if-match.middleware.js";
 import { rbacMiddleware } from "../../middlewares/rbac.middleware.js";
 import { validateMiddleware } from "../../middlewares/validate.middleware.js";
 import type { RecipeController } from "./recipe.controller.js";
@@ -69,6 +70,8 @@ export function createRecipeRouter(
     "/:id/approve",
     authGuard,
     rbacMiddleware(RECIPE_APPROVER_ROLES),
+    // Bloqueo optimista (#46): `428` sin `If-Match` antes de validar y de consultar la base.
+    requireIfMatchMiddleware({ singleTag: true }),
     validateMiddleware({ params: recipeIdParamsSchema }),
     controller.approve,
   );

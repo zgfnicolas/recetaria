@@ -67,6 +67,8 @@ model Recipe {
   authorId        String       @db.Uuid
   reviewedById    String?      @db.Uuid
   publishedAt     DateTime?    @db.Timestamptz(6)
+  /// Versión de contenido para ETag/If-Match (#46); la incrementa el trigger trg_recipes_version
+  version         Int          @default(1)
   createdAt       DateTime     @default(now()) @db.Timestamptz(6)
   updatedAt       DateTime     @default(now()) @updatedAt @db.Timestamptz(6)
 

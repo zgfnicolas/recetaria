@@ -27,6 +27,7 @@ import {
   RECIPE_ALREADY_APPROVED_MESSAGE,
   RECIPE_APPROVAL_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
+  RECIPE_VERSION_MISMATCH_MESSAGE,
 } from "../../../src/modules/recipes/index.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
@@ -52,6 +53,8 @@ const CHEF_OWN_ID = "22222222-2222-4222-8222-222222222222";
 /** Receta `DRAFT` cuyo Autor es el `NUTRITIONIST` (auto-aprobación). */
 const NUTRI_OWN_ID = "33333333-3333-4333-8333-333333333333";
 const MISSING_ID = "99999999-9999-4999-8999-999999999999";
+/** ETag vigente de las recetas sembradas (`version = 1`, #46); el contrato exige `If-Match`. */
+const CURRENT_ETAG = '"1"';
 const ROLLBACK_TRIGGER = "trg_test_19_fail_audit_insert";
 const ROLLBACK_FUNCTION = "test_19_fail_audit_insert";
 
@@ -190,6 +193,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
         // Act
         const res = await request(app)
           .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+          .set("If-Match", CURRENT_ETAG)
           .set("Authorization", bearer(reviewer));
 
         // Assert — respuesta JSend
@@ -242,6 +246,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
         // Act
         const res = await request(app)
           .put(`/api/v1/recipes/${id}/approve`)
+          .set("If-Match", CURRENT_ETAG)
           .set("Authorization", bearer(USERS.chef));
 
         // Assert
@@ -267,7 +272,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       "responde 401 %s, sin modificar la receta",
       async (_label, authorization) => {
         // Act
-        const req = request(app).put(`/api/v1/recipes/${DRAFT_ID}/approve`);
+        const req = request(app).put(`/api/v1/recipes/${DRAFT_ID}/approve`).set("If-Match", CURRENT_ETAG);
         const res = await (authorization === undefined
           ? req
           : req.set("Authorization", authorization));
@@ -280,7 +285,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
 
     it("autentica antes de validar: :id inválido sin token responde 401, no 400", async () => {
       // Act
-      const res = await request(app).put("/api/v1/recipes/abc/approve");
+      const res = await request(app).put("/api/v1/recipes/abc/approve").set("If-Match", CURRENT_ETAG);
 
       // Assert
       expect(res.status).toBe(401);
@@ -293,6 +298,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       // Act
       const res = await request(app)
         .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+        .set("If-Match", CURRENT_ETAG)
         .set("Authorization", bearer(ghost));
 
       // Assert
@@ -313,6 +319,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       // Act
       const res = await request(app)
         .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+        .set("If-Match", CURRENT_ETAG)
         .set("Authorization", bearer(actor));
 
       // Assert
@@ -329,6 +336,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       // Act
       const res = await request(app)
         .put("/api/v1/recipes/abc/approve")
+        .set("If-Match", CURRENT_ETAG)
         .set("Authorization", bearer(USERS.user));
 
       // Assert
@@ -344,6 +352,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
         // Act
         const res = await request(app)
           .put(`/api/v1/recipes/${recipeId}/approve`)
+          .set("If-Match", CURRENT_ETAG)
           .set("Authorization", bearer(reviewer));
 
         // Assert
@@ -363,6 +372,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       // Act
       const res = await request(app)
         .put(`/api/v1/recipes/${MISSING_ID}/approve`)
+        .set("If-Match", CURRENT_ETAG)
         .set("Authorization", bearer(USERS.chef));
 
       // Assert
@@ -402,6 +412,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
     // `.then()` dispara el envío ya: Supertest no ejecuta el request hasta que se lo consume.
     const pending = request(app)
       .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+      .set("If-Match", CURRENT_ETAG)
       .set("Authorization", bearer(USERS.chef))
       .then((response) => response);
     try {
@@ -427,15 +438,24 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       // Arrange
       const first = await request(app)
         .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+        .set("If-Match", CURRENT_ETAG)
         .set("Authorization", bearer(USERS.chef));
       expect(first.status).toBe(200);
 
-      // Act
+      // Act — con el ETag vigente tras la primera aprobación (versión 2): ya no hay nada que aprobar
       const second = await request(app)
         .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+        .set("If-Match", String(first.headers["etag"]))
+        .set("Authorization", bearer(USERS.nutritionist));
+      // Con el ETag viejo (versión 1), la versión revisada ya no es la vigente: 412 antes que 409 (#46)
+      const stale = await request(app)
+        .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+        .set("If-Match", CURRENT_ETAG)
         .set("Authorization", bearer(USERS.nutritionist));
 
       // Assert
+      expect(first.headers["etag"]).toBe('"2"');
+      expect(stale.status).toBe(412);
       expect(second.status).toBe(409);
       expect(second.body).toMatchObject({
         success: false,
@@ -451,7 +471,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       ).toBe(1);
     });
 
-    it("ante dos aprobaciones concurrentes, una gana (200), la otra recibe 409 y queda 1 único registro", async () => {
+    it("ante dos aprobaciones concurrentes, una gana (200), la otra recibe 412 y queda 1 único registro", async () => {
       // Arrange — barrera determinista: una transacción externa toma el lock de la fila, así
       // ambas solicitudes superan el chequeo del servicio (leen DRAFT, MVCC no bloquea lecturas)
       // y sus UPDATE quedan esperando el lock. Se libera recién con los 2 UPDATE en espera.
@@ -478,6 +498,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
         [USERS.chef, USERS.nutritionist].map((reviewer) =>
           request(app)
             .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+            .set("If-Match", CURRENT_ETAG)
             .set("Authorization", bearer(reviewer)),
         ),
       );
@@ -490,11 +511,12 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       const responses = await pending;
 
       // Assert
-      expect(responses.map((res) => res.status).sort()).toEqual([200, 409]);
-      const loser = responses.find((res) => res.status === 409);
+      // El perdedor revisó la versión 1, que la aprobación ganadora ya incrementó: 412 (#46)
+      expect(responses.map((res) => res.status).sort()).toEqual([200, 412]);
+      const loser = responses.find((res) => res.status === 412);
       expect(loser?.body).toMatchObject({
         success: false,
-        message: RECIPE_ALREADY_APPROVED_MESSAGE,
+        message: RECIPE_VERSION_MISMATCH_MESSAGE,
       });
       const winner = responses.find((res) => res.status === 200);
       const winnerId = (winner?.body as RecipeBody | undefined)?.data
@@ -534,6 +556,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
         // Act
         const res = await request(app)
           .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+          .set("If-Match", CURRENT_ETAG)
           .set("Authorization", bearer(USERS.chef));
 
         // Assert
@@ -547,6 +570,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       // Tras quitar el trigger, la misma aprobación funciona (no quedó estado inconsistente)
       const retry = await request(app)
         .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+        .set("If-Match", CURRENT_ETAG)
         .set("Authorization", bearer(USERS.chef));
       expect(retry.status).toBe(200);
       expect(await db.prisma.auditLog.count()).toBe(1);

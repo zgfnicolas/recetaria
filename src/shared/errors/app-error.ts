@@ -11,8 +11,10 @@ export type HttpErrorStatusCode =
   | 403
   | 404
   | 409
+  | 412
   | 413
   | 422
+  | 428
   | 429
   | 500
   | 502
@@ -96,6 +98,23 @@ export class NotFoundError extends AppError {
 export class ConflictError extends AppError {
   constructor(message = "Conflicto con el estado actual del recurso", options?: AppErrorOptions) {
     super(409, message, options);
+  }
+}
+
+/**
+ * Error 412 Precondition Failed: el `If-Match` enviado no coincide con la versión actual del
+ * recurso (bloqueo optimista, RFC 9110 §13.1.1).
+ */
+export class PreconditionFailedError extends AppError {
+  constructor(message = "La versión del recurso cambió", options?: AppErrorOptions) {
+    super(412, message, options);
+  }
+}
+
+/** Error 428 Precondition Required: la operación exige un `If-Match` condicional (RFC 6585 §3). */
+export class PreconditionRequiredError extends AppError {
+  constructor(message = "Se requiere una solicitud condicional", options?: AppErrorOptions) {
+    super(428, message, options);
   }
 }
 
