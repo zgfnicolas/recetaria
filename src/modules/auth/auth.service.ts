@@ -22,6 +22,12 @@ export const DUMMY_BCRYPT_HASH =
 
 const DUMMY_COMPARE_PASSWORD = "invalid-dummy-compare-password";
 
+/**
+ * Rol que el servidor asigna a todo auto-registro público (#48, ADR-0007). Los roles
+ * privilegiados (`CHEF`, `NUTRITIONIST`, `ADMIN`) solo se obtienen por seed o SQL manual.
+ */
+export const SELF_REGISTERED_ROLE = "USER" as const satisfies UserRole;
+
 export type AuthServiceOptions = Readonly<{
   saltRounds?: number | undefined;
   jwt?: JwtConfig | undefined;
@@ -99,7 +105,7 @@ export class AuthService implements IAuthService {
       passwordHash,
       firstName: dto.firstName.trim(),
       lastName: dto.lastName.trim(),
-      role: dto.role,
+      role: SELF_REGISTERED_ROLE,
     });
 
     return {

@@ -20,8 +20,9 @@ import {
   validateMiddleware,
   type ValidatedRequest,
 } from "../../../src/middlewares/validate.middleware.js";
-import { INVALID_TOKEN_MESSAGE, type JwtConfig, type UserRole } from "../../../src/modules/auth/index.js";
+import { INVALID_TOKEN_MESSAGE, type JwtConfig } from "../../../src/modules/auth/index.js";
 import { sendSuccess } from "../../../src/shared/http/jsend.js";
+import { registerAndLogin } from "../../support/users.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const UUID_V4_PATTERN =
@@ -117,33 +118,6 @@ function createGuardsTestApp(options: {
   });
 }
 
-async function registerAndLogin(
-  app: express.Express,
-  options: { readonly email: string; readonly role: UserRole },
-): Promise<{ readonly token: string; readonly userId: string }> {
-  const password = "test-password-example";
-
-  const registerRes = await request(app).post("/api/v1/auth/register").send({
-    email: options.email,
-    password,
-    firstName: "Guard",
-    lastName: options.role,
-    role: options.role,
-  });
-  expect(registerRes.status).toBe(201);
-
-  const loginRes = await request(app).post("/api/v1/auth/login").send({
-    email: options.email,
-    password,
-  });
-  expect(loginRes.status).toBe(200);
-
-  return {
-    token: String(loginRes.body.data.token),
-    userId: String(loginRes.body.data.user.id),
-  };
-}
-
 describe("Guardas transversales authMiddleware y rbacMiddleware — Integración HTTP y abuso", () => {
   let db: Database;
 
@@ -175,7 +149,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
         onLog: (line) => logs.push(line),
         onError,
       });
-      const { token, userId } = await registerAndLogin(app, {
+      const { token, userId } = await registerAndLogin(app, db, {
         email: `${role.toLowerCase()}-guards@recetaria.com`,
         role,
       });
@@ -187,7 +161,9 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
 
       // Assert
       expect(onError).not.toHaveBeenCalled();
-      expect(logs).toHaveLength(3);
+      // USER: register + login + /me; roles privilegiados se siembran (#48): login + /me
+      expect(logs).toHaveLength(role === "USER" ? 3 : 2);
+      expect(logs.at(-1)).toContain("/api/v1/protected/me");
       expect(logs.join("\n")).not.toContain(token);
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
@@ -215,13 +191,13 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
       onLog: vi.fn(),
       onError,
     });
-    const userSession = await registerAndLogin(app, { email: "user@recetaria.com", role: "USER" });
-    const adminSession = await registerAndLogin(app, {
+    const userSession = await registerAndLogin(app, db, { email: "user@recetaria.com", role: "USER" });
+    const adminSession = await registerAndLogin(app, db, {
       email: "admin@recetaria.com",
       role: "ADMIN",
     });
-    const chefSession = await registerAndLogin(app, { email: "chef@recetaria.com", role: "CHEF" });
-    const nutriSession = await registerAndLogin(app, {
+    const chefSession = await registerAndLogin(app, db, { email: "chef@recetaria.com", role: "CHEF" });
+    const nutriSession = await registerAndLogin(app, db, {
       email: "nutri@recetaria.com",
       role: "NUTRITIONIST",
     });
@@ -278,12 +254,12 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
       onLog: vi.fn(),
       onError,
     });
-    const userSession = await registerAndLogin(app, { email: "user@recetaria.com", role: "USER" });
-    const adminSession = await registerAndLogin(app, {
+    const userSession = await registerAndLogin(app, db, { email: "user@recetaria.com", role: "USER" });
+    const adminSession = await registerAndLogin(app, db, {
       email: "admin@recetaria.com",
       role: "ADMIN",
     });
-    const chefSession = await registerAndLogin(app, { email: "chef@recetaria.com", role: "CHEF" });
+    const chefSession = await registerAndLogin(app, db, { email: "chef@recetaria.com", role: "CHEF" });
     const invalidBoplaPayload = { note: "no", injected: true };
 
     // Act
@@ -337,13 +313,13 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
       onLog: vi.fn(),
       onError,
     });
-    const userSession = await registerAndLogin(app, { email: "user-del@recetaria.com", role: "USER" });
-    const chefSession = await registerAndLogin(app, { email: "chef-del@recetaria.com", role: "CHEF" });
-    const nutriSession = await registerAndLogin(app, {
+    const userSession = await registerAndLogin(app, db, { email: "user-del@recetaria.com", role: "USER" });
+    const chefSession = await registerAndLogin(app, db, { email: "chef-del@recetaria.com", role: "CHEF" });
+    const nutriSession = await registerAndLogin(app, db, {
       email: "nutri-del@recetaria.com",
       role: "NUTRITIONIST",
     });
-    const adminSession = await registerAndLogin(app, {
+    const adminSession = await registerAndLogin(app, db, {
       email: "admin-del@recetaria.com",
       role: "ADMIN",
     });
@@ -408,7 +384,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
       onLog: (line) => logs.push(line),
       onError,
     });
-    const realSession = await registerAndLogin(app, { email: "abuse@recetaria.com", role: "USER" });
+    const realSession = await registerAndLogin(app, db, { email: "abuse@recetaria.com", role: "USER" });
     const [realHeader, , realSignature] = realSession.token.split(".");
     const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const nowSeconds = Math.floor(Date.now() / 1000);
@@ -579,7 +555,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
       onLog: vi.fn(),
       onError: vi.fn(),
     });
-    const { token, userId } = await registerAndLogin(app, {
+    const { token, userId } = await registerAndLogin(app, db, {
       email: "stateless@recetaria.com",
       role: "CHEF",
     });

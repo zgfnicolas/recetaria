@@ -17,6 +17,8 @@ const emailFieldSchema = z
 /**
  * Esquema estricto de validación de entrada para `POST /api/v1/auth/register`.
  * Rechaza propiedades extra (BOPLA) y acota la contraseña a 72 bytes UTF-8.
+ * No admite `role` (#48, ADR-0007): cualquier valor, incluido `USER`, responde `400`
+ * "Campo no permitido" y el servidor asigna siempre `USER` (prevención BFLA/mass assignment).
  */
 export const registerSchema = z.strictObject({
   email: emailFieldSchema,
@@ -36,7 +38,6 @@ export const registerSchema = z.strictObject({
     .trim()
     .min(2, { error: "El apellido debe tener al menos 2 caracteres" })
     .max(100, { error: "El apellido no puede superar los 100 caracteres" }),
-  role: z.enum(USER_ROLES, { error: "Rol inválido" }).default("USER"),
 });
 
 /**

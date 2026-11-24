@@ -11,13 +11,14 @@ import {
   type Database,
 } from "../../../src/infrastructure/database/prisma.js";
 import { createAuthMiddleware } from "../../../src/middlewares/auth.middleware.js";
-import type { JwtConfig, UserRole } from "../../../src/modules/auth/index.js";
+import type { JwtConfig } from "../../../src/modules/auth/index.js";
 import {
   createRecipeRouter,
   RecipeController,
   RecipeRepository,
   RecipeService,
 } from "../../../src/modules/recipes/index.js";
+import { registerAndLogin } from "../../support/users.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{8}$/;
@@ -55,31 +56,6 @@ function createApp(
   });
 }
 
-async function registerAndLogin(
-  app: express.Express,
-  options: { readonly email: string; readonly role: UserRole },
-): Promise<{ readonly token: string; readonly userId: string }> {
-  const password = "test-password-example";
-  const registerRes = await request(app).post("/api/v1/auth/register").send({
-    email: options.email,
-    password,
-    firstName: "Autor",
-    lastName: options.role,
-    role: options.role,
-  });
-  expect(registerRes.status).toBe(201);
-
-  const loginRes = await request(app)
-    .post("/api/v1/auth/login")
-    .send({ email: options.email, password });
-  expect(loginRes.status).toBe(200);
-
-  return {
-    token: String(loginRes.body.data.token),
-    userId: String(loginRes.body.data.user.id),
-  };
-}
-
 describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP + PostgreSQL)", () => {
   let db: Database;
 
@@ -105,7 +81,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
       async (role) => {
         // Arrange
         const app = createApp(db);
-        const { token, userId } = await registerAndLogin(app, {
+        const { token, userId } = await registerAndLogin(app, db, {
           email: `${role.toLowerCase()}-recipes@recetaria.com`,
           role,
         });
@@ -163,7 +139,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
       async (prepTimeMinutes) => {
         // Arrange
         const app = createApp(db);
-        const { token } = await registerAndLogin(app, { email: "edge@recetaria.com", role: "USER" });
+        const { token } = await registerAndLogin(app, db, { email: "edge@recetaria.com", role: "USER" });
 
         // Act
         const res = await request(app)
@@ -180,7 +156,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("persiste la entrada completa con nutritionalInfo como objeto JSONB, tags y URLs", async () => {
       // Arrange
       const app = createApp(db);
-      const { token } = await registerAndLogin(app, { email: "full@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "full@recetaria.com", role: "USER" });
       const body = {
         ...VALID_RECIPE,
         difficulty: "HARD",
@@ -296,7 +272,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
       async (field) => {
         // Arrange
         const app = createApp(db);
-        const { token } = await registerAndLogin(app, { email: "bopla@recetaria.com", role: "CHEF" });
+        const { token } = await registerAndLogin(app, db, { email: "bopla@recetaria.com", role: "CHEF" });
 
         // Act
         const res = await request(app)
@@ -319,7 +295,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("rechaza claves extra anidadas en ingredientes y nutritionalInfo", async () => {
       // Arrange
       const app = createApp(db);
-      const { token } = await registerAndLogin(app, { email: "nested@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "nested@recetaria.com", role: "USER" });
 
       // Act
       const res = await request(app)
@@ -344,7 +320,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("rechaza un cuerpo estructuralmente inválido detallando cada campo", async () => {
       // Arrange
       const app = createApp(db);
-      const { token } = await registerAndLogin(app, { email: "zod@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "zod@recetaria.com", role: "USER" });
 
       // Act
       const res = await request(app)
@@ -370,7 +346,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("rechaza payloads que exceden los topes de description, ingredients y quantity (OWASP API4)", async () => {
       // Arrange
       const app = createApp(db);
-      const { token } = await registerAndLogin(app, { email: "caps@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "caps@recetaria.com", role: "USER" });
 
       // Act
       const res = await request(app)
@@ -392,7 +368,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("rechaza un cuerpo text/plain con 400 sin alcanzar el servicio", async () => {
       // Arrange
       const app = createApp(db);
-      const { token } = await registerAndLogin(app, { email: "plain@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "plain@recetaria.com", role: "USER" });
 
       // Act
       const res = await request(app)
@@ -410,7 +386,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("rechaza JSON malformado con 400", async () => {
       // Arrange
       const app = createApp(db);
-      const { token } = await registerAndLogin(app, { email: "json@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "json@recetaria.com", role: "USER" });
 
       // Act
       const res = await request(app)
@@ -429,7 +405,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
       async (prepTimeMinutes) => {
         // Arrange
         const app = createApp(db);
-        const { token } = await registerAndLogin(app, { email: "rn07@recetaria.com", role: "USER" });
+        const { token } = await registerAndLogin(app, db, { email: "rn07@recetaria.com", role: "USER" });
 
         // Act
         const res = await request(app)
@@ -457,7 +433,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("rechaza ingredientes con quantity <= 0 en RecipeService (RN-07) acumulando errores", async () => {
       // Arrange
       const app = createApp(db);
-      const { token } = await registerAndLogin(app, { email: "qty@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "qty@recetaria.com", role: "USER" });
 
       // Act
       const res = await request(app)
@@ -487,7 +463,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("devuelve la receta tipada por slug o null si no existe", async () => {
       // Arrange
       const app = createApp(db);
-      const { token } = await registerAndLogin(app, { email: "find@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "find@recetaria.com", role: "USER" });
       const created = await request(app)
         .post("/api/v1/recipes")
         .set("Authorization", `Bearer ${token}`)
@@ -511,7 +487,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
     it("trata un JSONB persistido con formato inválido como error 500 no operacional (no 400)", async () => {
       // Arrange
       const app = createApp(db);
-      const { userId } = await registerAndLogin(app, { email: "corrupt@recetaria.com", role: "USER" });
+      const { userId } = await registerAndLogin(app, db, { email: "corrupt@recetaria.com", role: "USER" });
       await db.prisma.$executeRaw`
         INSERT INTO "recipes" ("title", "slug", "description", "prepTimeMinutes", "ingredients", "authorId")
         VALUES ('Corrupta', 'corrupta-0a1b2c3d', 'Descripción corrupta', 10, '[{"name": 1}]'::jsonb, ${userId}::uuid)`;
@@ -546,7 +522,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
         onLog: () => undefined,
         onError: () => undefined,
       });
-      const { token } = await registerAndLogin(app, { email: "slug@recetaria.com", role: "USER" });
+      const { token } = await registerAndLogin(app, db, { email: "slug@recetaria.com", role: "USER" });
       const send = () =>
         request(app).post("/api/v1/recipes").set("Authorization", `Bearer ${token}`).send(VALID_RECIPE);
 

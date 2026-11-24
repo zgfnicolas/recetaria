@@ -30,8 +30,8 @@ description: >-
 
 | Escenario | Arquitectura recomendada | Notas para Recetaria |
 |---|---|---|
-| **MVP actual (API REST)** | Bearer JWT stateless (`HS256`, vida corta) + Bcrypt `>= 10` | Definido en `ADR-0004` y `ADR-0005`; sin tabla `sessions`. En `/register`, `role` opcional solo para pruebas de cátedra |
-| **Fase Beta / Producción** | Restringir `/register` a `role = 'USER'` + flujo KYC por `ADMIN`; migrar a **Argon2id** con rehash en login + chequeo HIBP (`k-anonymity`) | Evita escalada de privilegios y contraseñas filtradas (NIST 800-63B-4) |
+| **MVP actual (API REST)** | Bearer JWT stateless (`HS256`, vida corta) + Bcrypt `>= 10` | Definido en `ADR-0004`, `ADR-0005` y `ADR-0007`; sin tabla `sessions`. `/register` crea siempre `USER` y rechaza `role` con `400` (#48); los roles privilegiados solo se obtienen por seed (`development|test`) |
+| **Fase Beta / Producción** | Alta de roles privilegiados por endpoint de administración auditado + flujo KYC por `ADMIN` (el registro ya está restringido a `USER`, ADR-0007); migrar a **Argon2id** con rehash en login + chequeo HIBP (`k-anonymity`) | Evita escalada de privilegios y contraseñas filtradas (NIST 800-63B-4) |
 | **Cliente Web / SPA propia** | **BFF** o sesión opaca server-side (`__Host-session`, `HttpOnly`, `Secure`, `SameSite=Lax`, ID ≥ 128 bits hasheado con SHA-256 en store, idle + absolute timeout) + CSRF (`Sec-Fetch-Site` + `Origin`) | Nunca guardar tokens en `localStorage`/`sessionStorage`; regenerar sesión en login y cambios de privilegio |
 | **Clientes móviles / revocación** | Access token corto + **refresh tokens rotados** con detección de reutilización (revocación de familia en `$transaction`) | Sin renovación infinita; revocar en logout o cambio de contraseña |
 | **Cuentas `ADMIN` / alto riesgo** | **Passkeys (WebAuthn)** o TOTP sin replay + códigos de recuperación hasheados + **step-up** en operaciones críticas | Obligatorio al operar datos reales en producción |

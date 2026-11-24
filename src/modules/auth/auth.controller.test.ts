@@ -54,16 +54,16 @@ describe("AuthController.register", () => {
   it("lee exclusivamente req.valid.body (ignorando req.body crudo), delega en AuthService y responde 201 JSend", async () => {
     // Arrange
     const validBody: RegisterDTO = {
-      email: "chef@recetaria.com",
+      email: "clara@recetaria.com",
       password: "password123",
       firstName: "Clara",
-      lastName: "Chef",
-      role: "CHEF",
+      lastName: "Registro",
     };
+    // El rol lo decide AuthService (USER, #48); el controlador solo lo transmite tal cual
     const registerMock = vi.fn<IAuthService["register"]>().mockResolvedValue({
       id: "11111111-1111-4111-8111-111111111111",
-      email: "chef@recetaria.com",
-      role: "CHEF",
+      email: "clara@recetaria.com",
+      role: "USER",
     });
     const loginMock = vi.fn<IAuthService["login"]>();
     const { app, nextErrors } = createControllerTestHarness({
@@ -89,8 +89,8 @@ describe("AuthController.register", () => {
       message: "Usuario registrado exitosamente",
       data: {
         id: "11111111-1111-4111-8111-111111111111",
-        email: "chef@recetaria.com",
-        role: "CHEF",
+        email: "clara@recetaria.com",
+        role: "USER",
       },
     });
   });
@@ -131,7 +131,6 @@ describe("AuthController.register", () => {
       password: "password123",
       firstName: "Duplicado",
       lastName: "Test",
-      role: "USER",
     };
     const conflictError = new ConflictError("El correo electrónico ya está registrado");
     const unexpectedError = new Error("Unexpected failure");

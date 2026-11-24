@@ -55,7 +55,7 @@ function buildPersistedUser(overrides?: Partial<UserRecord>): UserRecord {
 }
 
 describe("AuthService.register (RN-08)", () => {
-  it("normaliza email/nombres, conserva espacios de password, cifra con Bcrypt (>= 10 rounds, salts únicos) y devuelve { id, email, role } (RN-08)", async () => {
+  it("normaliza email/nombres, conserva espacios de password, cifra con Bcrypt (>= 10 rounds, salts únicos), asigna USER y devuelve { id, email, role } (RN-08, #48)", async () => {
     // Arrange
     const { repository, findByEmail, create } = createMockRepository();
     const capturedInputs: CreateUserInput[] = [];
@@ -82,14 +82,12 @@ describe("AuthService.register (RN-08)", () => {
       password: plainWithSpaces,
       firstName: "  Ana  ",
       lastName: "  López  ",
-      role: "CHEF",
     });
     const secondResult = await service.register({
       email: "otro@recetaria.com",
       password: plainWithSpaces,
       firstName: "Otro",
       lastName: "Usuario",
-      role: "USER",
     });
 
     // Assert
@@ -106,7 +104,8 @@ describe("AuthService.register (RN-08)", () => {
       expect(firstCreateInput.email).toBe("ana.lopez@recetaria.com");
       expect(firstCreateInput.firstName).toBe("Ana");
       expect(firstCreateInput.lastName).toBe("López");
-      expect(firstCreateInput.role).toBe("CHEF");
+      // El servidor asigna siempre USER (#48): el cliente ya no puede elegir el rol
+      expect(firstCreateInput.role).toBe("USER");
       expect(firstCreateInput.passwordHash).not.toBe(plainWithSpaces);
       expect(bcrypt.getRounds(firstCreateInput.passwordHash)).toBe(10);
       expect(bcrypt.getRounds(firstCreateInput.passwordHash)).toBeGreaterThanOrEqual(10);
@@ -119,7 +118,7 @@ describe("AuthService.register (RN-08)", () => {
     expect(firstResult).toEqual({
       id: "11111111-1111-4111-8111-111111111111",
       email: "ana.lopez@recetaria.com",
-      role: "CHEF",
+      role: "USER",
     });
     expect(Object.keys(firstResult).sort()).toEqual(["email", "id", "role"]);
     expect("passwordHash" in firstResult).toBe(false);
@@ -140,7 +139,6 @@ describe("AuthService.register (RN-08)", () => {
         password: "password123",
         firstName: "Usuario",
         lastName: "Duplicado",
-        role: "USER",
       });
     } catch (err: unknown) {
       caughtError = err;
@@ -171,7 +169,6 @@ describe("AuthService.register (RN-08)", () => {
         password: "password123",
         firstName: "Carrera",
         lastName: "Concurrente",
-        role: "USER",
       });
     } catch (err: unknown) {
       caughtError = err;
@@ -200,7 +197,6 @@ describe("AuthService.register (RN-08)", () => {
         password: "password123",
         firstName: "Error",
         lastName: "Conexion",
-        role: "USER",
       });
     } catch (err: unknown) {
       caughtError = err;
@@ -227,7 +223,6 @@ describe("AuthService.register (RN-08)", () => {
       password: "password123",
       firstName: "Rondas",
       lastName: "Once",
-      role: "USER",
     });
 
     // Assert

@@ -7,6 +7,7 @@ import {
   getDatabase,
   type Database,
 } from "../../../src/infrastructure/database/prisma.js";
+import { DEFAULT_SEED_PASSWORD, SEED_USERS, seedUsers } from "../../../prisma/seed.js";
 import { UserRepository } from "../../../src/modules/auth/index.js";
 import { ConflictError } from "../../../src/shared/errors/app-error.js";
 
@@ -103,39 +104,188 @@ describe("POST /api/v1/auth/register — Integración HTTP (Supertest + PostgreS
     }
   });
 
-  it.each(EXPECTED_MVP_ROLES)(
-    "permite registrar usuario con rol explícito %s según docs/roles.md y lo persiste activo en PostgreSQL",
+  it.each([...EXPECTED_MVP_ROLES, "ROOT", null, ["ADMIN"]])(
+    "rechaza role = %j con 400 \"Campo no permitido\" sin crear el usuario, incluido USER (BFLA, #48)",
     async (role) => {
       // Arrange
       const app = buildApp({ prisma: db.prisma, onLog: vi.fn(), onError: vi.fn() });
-      const plainPassword = "CentinelaRole!2026";
 
       // Act
       const res = await request(app).post("/api/v1/auth/register").send({
-        email: `${role.toLowerCase()}@recetaria.com`,
-        password: plainPassword,
+        email: "escalada@recetaria.com",
+        password: "CentinelaRole!2026",
         firstName: "Perfil",
         lastName: "RoleTest",
         role,
       });
 
-      // Assert
-      expect(res.status).toBe(201);
-      expect(res.body.data.role).toBe(role);
-
-      const persisted = await db.prisma.user.findUnique({
-        where: { id: res.body.data.id },
-        omit: { passwordHash: false },
+      // Assert — mismo sobre BOPLA que cualquier clave extra; no enumera los roles existentes
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({
+        success: false,
+        statusCode: 400,
+        message: "Error de validación",
+        errors: [{ field: "role", message: "Campo no permitido" }],
       });
-      expect(persisted).not.toBeNull();
-      if (persisted !== null) {
-        expect(persisted.role).toBe(role);
-        expect(persisted.isActive).toBe(true);
-        expect(bcrypt.getRounds(persisted.passwordHash)).toBeGreaterThanOrEqual(10);
-        expect(await bcrypt.compare(plainPassword, persisted.passwordHash)).toBe(true);
-      }
+      expect(JSON.stringify(res.body)).not.toMatch(/CHEF|NUTRITIONIST|ADMIN/);
+      expect(await db.prisma.user.count()).toBe(0);
     },
   );
+
+  it.each(["Role", "ROLE", "isActive", "passwordHash", "id"])(
+    "rechaza la clave protegida %s en el registro (mass assignment) sin crear el usuario",
+    async (key) => {
+      // Arrange
+      const app = buildApp({ prisma: db.prisma, onLog: vi.fn(), onError: vi.fn() });
+
+      // Act
+      const res = await request(app).post("/api/v1/auth/register").send({
+        email: "masiva@recetaria.com",
+        password: "CentinelaRole!2026",
+        firstName: "Perfil",
+        lastName: "Masivo",
+        [key]: key === "isActive" ? false : "ADMIN",
+      });
+
+      // Assert
+      expect(res.status).toBe(400);
+      expect(res.body.errors).toEqual([{ field: key, message: "Campo no permitido" }]);
+      expect(await db.prisma.user.count()).toBe(0);
+    },
+  );
+
+  it.each([
+    ["__proto__ con role", '{"email":"proto@recetaria.com","password":"CentinelaRole!2026","firstName":"Pro","lastName":"To","__proto__":{"role":"ADMIN"}}', "__proto__"],
+    ["constructor con role", '{"email":"proto@recetaria.com","password":"CentinelaRole!2026","firstName":"Pro","lastName":"To","constructor":{"prototype":{"role":"ADMIN"}}}', "constructor"],
+  ])("rechaza %s en el body sin contaminar prototipos ni crear el usuario", async (_label, rawBody, key) => {
+    // Arrange
+    const app = buildApp({ prisma: db.prisma, onLog: vi.fn(), onError: vi.fn() });
+
+    // Act
+    const res = await request(app)
+      .post("/api/v1/auth/register")
+      .set("Content-Type", "application/json")
+      .send(rawBody);
+
+    // Assert
+    expect(res.status).toBe(400);
+    expect(res.body.errors).toEqual([{ field: key, message: "Campo no permitido" }]);
+    expect(({} as Record<string, unknown>)["role"]).toBeUndefined();
+    expect(await db.prisma.user.count()).toBe(0);
+  });
+
+  it("ignora ?role=ADMIN en la query: el registro crea igual un USER", async () => {
+    // Arrange
+    const app = buildApp({ prisma: db.prisma, onLog: vi.fn(), onError: vi.fn() });
+
+    // Act
+    const res = await request(app)
+      .post("/api/v1/auth/register?role=ADMIN")
+      .send({ email: "query@recetaria.com", password: "CentinelaRole!2026", firstName: "Que", lastName: "Ry" });
+
+    // Assert
+    expect(res.status).toBe(201);
+    expect(res.body.data.role).toBe("USER");
+    const persisted = await db.prisma.user.findUniqueOrThrow({ where: { email: "query@recetaria.com" } });
+    expect(persisted.role).toBe("USER");
+  });
+
+  it("los 4 usuarios del seed siguen pudiendo iniciar sesión con su rol (único camino a roles privilegiados)", async () => {
+    // Arrange
+    const app = buildApp({
+      prisma: db.prisma,
+      jwt: { secret: "test-jwt-secret-".repeat(3), expiresIn: "1h" },
+      authRateLimit: false,
+      onLog: vi.fn(),
+      onError: vi.fn(),
+    });
+    await seedUsers(db.prisma);
+
+    // Act
+    const sessions = await Promise.all(
+      SEED_USERS.map(async (user) => ({
+        expected: user.role,
+        res: await request(app)
+          .post("/api/v1/auth/login")
+          .send({ email: user.email, password: DEFAULT_SEED_PASSWORD }),
+      })),
+    );
+
+    // Assert
+    expect(sessions).toHaveLength(4);
+    for (const { expected, res } of sessions) {
+      expect(res.status).toBe(200);
+      expect(res.body.data.user.role).toBe(expected);
+    }
+    expect(new Set(sessions.map((session) => session.expected))).toEqual(
+      new Set(["USER", "CHEF", "NUTRITIONIST", "ADMIN"]),
+    );
+  });
+
+  it("de punta a punta: un intento de auto-asignarse ADMIN nunca obtiene privilegios (BFLA, #48)", async () => {
+    // Arrange — receta ajena en DRAFT para intentar operaciones privilegiadas
+    const app = buildApp({
+      prisma: db.prisma,
+      jwt: { secret: "test-jwt-secret-".repeat(3), expiresIn: "1h" },
+      publicRateLimit: false,
+      authRateLimit: false,
+      onLog: vi.fn(),
+      onError: vi.fn(),
+    });
+    const owner = await db.prisma.user.create({
+      data: {
+        email: "duena@recetaria.com",
+        passwordHash: await bcrypt.hash("password-duena", 10),
+        firstName: "Dueña",
+        lastName: "Receta",
+      },
+    });
+    const recipe = await db.prisma.recipe.create({
+      data: {
+        title: "Receta ajena",
+        slug: "receta-ajena-0a1b2c3d",
+        description: "Receta de otra persona para el intento de escalada.",
+        prepTimeMinutes: 10,
+        ingredients: [{ name: "Sal", quantity: 1, unit: "g" }],
+        authorId: owner.id,
+      },
+    });
+    const credentials = { email: "atacante@recetaria.com", password: "CentinelaRole!2026" };
+
+    // Act
+    const escalation = await request(app)
+      .post("/api/v1/auth/register")
+      .send({ ...credentials, firstName: "Ata", lastName: "Cante", role: "ADMIN" });
+    const plainRegister = await request(app)
+      .post("/api/v1/auth/register")
+      .send({ ...credentials, firstName: "Ata", lastName: "Cante" });
+    const login = await request(app).post("/api/v1/auth/login").send(credentials);
+    const token = String(login.body.data.token);
+    const deleteRes = await request(app)
+      .delete(`/api/v1/recipes/${recipe.id}`)
+      .set("Authorization", `Bearer ${token}`);
+    const approveRes = await request(app)
+      .put(`/api/v1/recipes/${recipe.id}/approve`)
+      .set("Authorization", `Bearer ${token}`)
+      // Sin efecto en el resultado: rbacMiddleware rechaza al USER antes de evaluar If-Match (#46)
+      .set("If-Match", '"1"');
+
+    // Assert
+    expect(escalation.status).toBe(400);
+    expect(plainRegister.status).toBe(201);
+    expect(plainRegister.body.data.role).toBe("USER");
+    expect(login.status).toBe(200);
+    expect(login.body.data.user.role).toBe("USER");
+    const [, payloadSegment] = token.split(".");
+    expect(JSON.parse(Buffer.from(payloadSegment ?? "", "base64url").toString("utf8"))).toMatchObject({
+      role: "USER",
+    });
+    expect(deleteRes.status).toBe(403);
+    expect(approveRes.status).toBe(403);
+    expect(await db.prisma.recipe.count({ where: { id: recipe.id } })).toBe(1);
+    const persisted = await db.prisma.user.findUniqueOrThrow({ where: { email: credentials.email } });
+    expect(persisted.role).toBe("USER");
+  });
 
   it("rechaza con 409 Conflict el registro de un email ya existente sin exponer contraseñas en respuesta ni logs (RN-08)", async () => {
     // Arrange

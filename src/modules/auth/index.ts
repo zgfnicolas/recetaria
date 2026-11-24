@@ -21,6 +21,7 @@ export {
   BCRYPT_SALT_ROUNDS,
   DUMMY_BCRYPT_HASH,
   INVALID_CREDENTIALS_MESSAGE,
+  SELF_REGISTERED_ROLE,
   type AuthServiceOptions,
   type AuthSession,
   type IAuthService,
