@@ -1,6 +1,13 @@
 import jwt from "jsonwebtoken";
 import { z } from "zod";
-import type { JwtExpiresIn } from "../../config/env.js";
+import {
+  isAllowedJwtExpiresIn,
+  JWT_EXPIRES_IN_FORMAT_MESSAGE,
+  JWT_EXPIRES_IN_MAX_MESSAGE,
+  jwtExpiresInToSeconds,
+  MAX_JWT_EXPIRES_IN_SECONDS,
+  type JwtExpiresIn,
+} from "../../config/jwt-expires-in.js";
 import { UnauthorizedError } from "../../shared/errors/app-error.js";
 import { USER_ROLES, type UserRole } from "./auth.schema.js";
 
@@ -8,7 +15,6 @@ export const JWT_ALGORITHM = "HS256" as const;
 export const MIN_JWT_SECRET_LENGTH = 32;
 export const INVALID_TOKEN_MESSAGE = "Token inválido o expirado";
 
-const JWT_EXPIRES_IN_PATTERN = /^[1-9]\d{0,5}(s|m|h|d|w|y)$/;
 const DISALLOWED_TOKEN_CHARS_PATTERN = /[\s\u0000-\u001f\u007f-\u009f]/;
 
 /** Esquema Zod 4 de claims mínimos `{ id, role }` extraídos del payload JWT. */
@@ -40,12 +46,19 @@ export function assertValidJwtSecret(secret: string): void {
 }
 
 /**
- * Valida de forma estricta secreto y expiración JWT antes de firmar tokens (*fail closed*).
+ * Valida de forma estricta secreto y expiración JWT antes de firmar tokens (*fail closed*):
+ * misma regla de formato y tope (`1d`, #52) que la validación de arranque, para que una app
+ * construida programáticamente (`buildApp({ jwt })`) tampoco emita tokens de vigencia excesiva.
  */
 export function assertValidJwtConfig(config: JwtConfig): void {
   assertValidJwtSecret(config.secret);
-  if (!JWT_EXPIRES_IN_PATTERN.test(config.expiresIn)) {
-    throw new RangeError(`JWT_EXPIRES_IN inválido: ${String(config.expiresIn)}`);
+  if (!isAllowedJwtExpiresIn(config.expiresIn)) {
+    // Mismo par de mensajes que el arranque: formato inválido vs. vigencia excesiva (#52)
+    const reason =
+      jwtExpiresInToSeconds(config.expiresIn) === null
+        ? JWT_EXPIRES_IN_FORMAT_MESSAGE
+        : JWT_EXPIRES_IN_MAX_MESSAGE;
+    throw new RangeError(`${reason} (recibido: ${String(config.expiresIn)})`);
   }
 }
 
@@ -64,6 +77,9 @@ export function signAccessToken(actor: Actor, config: JwtConfig): string {
 /**
  * Verifica un Bearer JWT stateless exclusivamente con `algorithms: ["HS256"]`,
  * valida `{ id: UUID, role: Role }` con Zod 4 y retorna un `Actor` congelado (*fail closed*).
+ * Defensa en profundidad del tope (#52): exige `iat` y `exp` numéricos, una antigüedad no mayor que
+ * `MAX_JWT_EXPIRES_IN_SECONDS` (`maxAge`) y una vigencia declarada `exp - iat` dentro del tope, así
+ * que ni un token sin `exp` ni uno con `exp` lejano (aun firmado con el secreto) son aceptados.
  * Lanza `RangeError` si `secret` es inválido y `UnauthorizedError` ante cualquier fallo del token.
  */
 export function verifyAccessToken(token: string, secret: string): Actor {
@@ -75,8 +91,20 @@ export function verifyAccessToken(token: string, secret: string): Actor {
 
   let decoded: string | jwt.JwtPayload;
   try {
-    decoded = jwt.verify(token, secret, { algorithms: [JWT_ALGORITHM] });
+    decoded = jwt.verify(token, secret, {
+      algorithms: [JWT_ALGORITHM],
+      maxAge: MAX_JWT_EXPIRES_IN_SECONDS,
+    });
   } catch {
+    throw new UnauthorizedError(INVALID_TOKEN_MESSAGE);
+  }
+
+  if (
+    typeof decoded !== "object" ||
+    typeof decoded.iat !== "number" ||
+    typeof decoded.exp !== "number" ||
+    decoded.exp - decoded.iat > MAX_JWT_EXPIRES_IN_SECONDS
+  ) {
     throw new UnauthorizedError(INVALID_TOKEN_MESSAGE);
   }
 

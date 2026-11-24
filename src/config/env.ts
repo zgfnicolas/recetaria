@@ -1,25 +1,25 @@
 import { isIP } from "node:net";
 import { config as dotenvConfig } from "dotenv";
 import { z } from "zod";
+import {
+  hasValidJwtExpiresInFormat,
+  isAllowedJwtExpiresIn,
+  JWT_EXPIRES_IN_FORMAT_MESSAGE,
+  JWT_EXPIRES_IN_MAX_MESSAGE,
+} from "./jwt-expires-in.js";
 
 /** Entornos de ejecución soportados por Recetaria API. */
 export const NODE_ENVS = ["development", "test", "production"] as const;
 
 export type NodeEnv = (typeof NODE_ENVS)[number];
 
-/** Unidades válidas (en segundos o superiores) compatibles con jsonwebtoken (`ms`). */
-export type JwtDurationUnit = "s" | "m" | "h" | "d" | "w" | "y";
-
-/** Expresión de expiración JWT compatible con `ms.StringValue`. */
-export type JwtExpiresIn = `${number}${JwtDurationUnit}`;
+export type { JwtDurationUnit, JwtExpiresIn } from "./jwt-expires-in.js";
 
 export type EnvSource = Readonly<Record<string, string | undefined>>;
 
 export type LoadEnvOptions = Readonly<{
   loadDotenv?: boolean | undefined;
 }>;
-
-const JWT_EXPIRES_IN_PATTERN = /^[1-9]\d{0,5}(s|m|h|d|w|y)$/;
 
 /** Máximo de saltos de proxy configurables en `TRUST_PROXY`. */
 export const MAX_TRUST_PROXY_HOPS = 10;
@@ -162,9 +162,16 @@ const trustProxySchema = z
     return entries.join(",");
   });
 
-function isJwtExpiresIn(value: string): value is JwtExpiresIn {
-  return JWT_EXPIRES_IN_PATTERN.test(value);
-}
+/**
+ * `JWT_EXPIRES_IN` con formato `ms` y tope máximo (#52): mensajes distintos para formato inválido
+ * y para vigencia excesiva, sin incluir valores de otras variables.
+ */
+const jwtExpiresInSchema = z
+  .string({ error: "JWT_EXPIRES_IN debe ser una duración válida" })
+  .trim()
+  .refine(hasValidJwtExpiresInFormat, { error: JWT_EXPIRES_IN_FORMAT_MESSAGE, abort: true })
+  .refine(isAllowedJwtExpiresIn, { error: JWT_EXPIRES_IN_MAX_MESSAGE })
+  .default("1d");
 
 function hasPostgresHostAndDatabase(rawUrl: string): boolean {
   try {
@@ -206,14 +213,7 @@ const envSchema = z.object({
     .refine((value) => value.replace(/\s+/g, "").length >= 32, {
       error: "JWT_SECRET debe contener al menos 32 caracteres distintos de espacios",
     }),
-  JWT_EXPIRES_IN: z
-    .string({ error: "JWT_EXPIRES_IN debe ser una duración válida" })
-    .trim()
-    .refine(isJwtExpiresIn, {
-      error:
-        "JWT_EXPIRES_IN debe tener formato válido con unidad explícita (ej.: 15m, 1h, 1d, 3600s)",
-    })
-    .default("1d"),
+  JWT_EXPIRES_IN: jwtExpiresInSchema,
   TRUST_PROXY: trustProxySchema,
 });
 
