@@ -99,6 +99,37 @@ export type ApproveWithAuditResult =
   | Readonly<{ outcome: "not_found" }>
   | Readonly<{ outcome: "already_approved" }>;
 
+/**
+ * Cambios de una edición (`HU-05`): solo las claves presentes se actualizan.
+ * `null` vacía los opcionales; `slug` llega regenerado si se editó `title`.
+ */
+export type UpdateRecipeChanges = Readonly<{
+  title?: string;
+  slug?: string;
+  description?: string;
+  difficulty?: RecipeDifficulty;
+  prepTimeMinutes?: number;
+  tags?: readonly string[];
+  ingredients?: readonly IngredientDTO[];
+  nutritionalInfo?: NutritionalInfoDTO | null;
+  coverImageUrl?: string | null;
+  videoUrl?: string | null;
+}>;
+
+export type UpdateWithOptionalResetInput = Readonly<{
+  recipeId: string;
+  actorId: string;
+  changes: UpdateRecipeChanges;
+}>;
+
+/**
+ * Resultado de `updateWithOptionalReset`, decidido sobre la fila bloqueada: `resetToDraft`
+ * indica si estaba `APPROVED` y se reinició con `RESET_TO_DRAFT`; `not_found` → `404`.
+ */
+export type UpdateWithOptionalResetResult =
+  | Readonly<{ outcome: "updated"; recipe: RecipeRecord; resetToDraft: boolean }>
+  | Readonly<{ outcome: "not_found" }>;
+
 export interface IRecipeRepository {
   create(data: CreateRecipeRecordInput): Promise<RecipeRecord>;
   findById(id: string): Promise<RecipeRecord | null>;
@@ -109,6 +140,11 @@ export interface IRecipeRepository {
    * en `audit_logs` con el snapshot real de la fila bloqueada como `oldValues`.
    */
   approveWithAudit(input: ApproveWithAuditInput): Promise<ApproveWithAuditResult>;
+  /**
+   * Actualiza los campos presentes y, **solo si la fila bloqueada estaba `APPROVED`**, la reinicia
+   * a `DRAFT` (limpia `reviewedById`/`publishedAt`) e inserta `RESET_TO_DRAFT` (`RN-02`, `RN-06`).
+   */
+  updateWithOptionalReset(input: UpdateWithOptionalResetInput): Promise<UpdateWithOptionalResetResult>;
 }
 
 export const RECIPE_SLUG_CONFLICT_MESSAGE = "Ya existe una receta con ese slug";
@@ -306,13 +342,10 @@ export class RecipeRepository implements IRecipeRepository {
     const publishedAt = new Date();
     try {
       return await this.#prisma.$transaction(async (tx): Promise<ApproveWithAuditResult> => {
-        const lockedRows = await tx.$queryRaw<unknown[]>`
-          SELECT status, "reviewedById", "publishedAt" FROM "recipes"
-          WHERE id = ${input.recipeId}::uuid FOR UPDATE`;
-        if (lockedRows.length === 0) {
+        const previous = await lockRecipeLifecycle(tx, input.recipeId);
+        if (previous === null) {
           return { outcome: "not_found" };
         }
-        const previous = parseLockedApprovalSnapshot(lockedRows[0]);
         if (previous.status !== "DRAFT") {
           return { outcome: "already_approved" };
         }
@@ -354,6 +387,100 @@ export class RecipeRepository implements IRecipeRepository {
       throw err;
     }
   }
+
+  /**
+   * Transacción interactiva `READ COMMITTED`: `SELECT … FOR UPDATE` bloquea la fila y la decisión
+   * de reiniciar se toma sobre ese estado confirmado (nunca sobre una lectura previa del servicio),
+   * así una aprobación concurrente no puede dejar `APPROVED` un contenido editado sin revisar.
+   */
+  async updateWithOptionalReset(
+    input: UpdateWithOptionalResetInput,
+  ): Promise<UpdateWithOptionalResetResult> {
+    try {
+      return await this.#prisma.$transaction(async (tx): Promise<UpdateWithOptionalResetResult> => {
+        const previous = await lockRecipeLifecycle(tx, input.recipeId);
+        if (previous === null) {
+          return { outcome: "not_found" };
+        }
+        const resetToDraft = previous.status === "APPROVED";
+
+        const row = await tx.recipe.update({
+          where: { id: input.recipeId },
+          data: resetToDraft
+            ? { ...toRecipeUpdateData(input.changes), status: "DRAFT", reviewedById: null, publishedAt: null }
+            : toRecipeUpdateData(input.changes),
+          select: RECIPE_PUBLIC_SELECT,
+        });
+
+        if (resetToDraft) {
+          await tx.auditLog.create({
+            data: {
+              entityName: AUDIT_ENTITY_RECIPE,
+              entityId: input.recipeId,
+              action: "RESET_TO_DRAFT" satisfies RecipeAuditAction,
+              userId: input.actorId,
+              oldValues: toApprovalSnapshotJson(previous),
+              newValues: {
+                ...toApprovalSnapshotJson({ status: "DRAFT", reviewedById: null, publishedAt: null }),
+                changedFields: Object.keys(input.changes).sort(),
+              },
+            },
+          });
+        }
+
+        return { outcome: "updated", recipe: toRecipeRecord(row), resetToDraft };
+      });
+    } catch (err: unknown) {
+      // Sin rama `P2003`: el actor es siempre el Autor y `fk_recipes_author` (`RESTRICT`) impide
+      // borrar un usuario con recetas, así que `audit_logs.userId` no puede violar su FK.
+      if (hasPrismaErrorCode(err, "P2002")) {
+        throw new ConflictError(RECIPE_SLUG_CONFLICT_MESSAGE, { cause: err });
+      }
+      throw err;
+    }
+  }
+}
+
+type TransactionClient = Parameters<Parameters<AppPrismaClient["$transaction"]>[0]>[0];
+
+/**
+ * Bloquea la fila (`SELECT … FOR UPDATE`) y devuelve su estado de ciclo de vida confirmado,
+ * o `null` si no existe. Compartido por `approveWithAudit` y `updateWithOptionalReset`.
+ */
+async function lockRecipeLifecycle(
+  tx: TransactionClient,
+  recipeId: string,
+): Promise<RecipeApprovalSnapshot | null> {
+  const lockedRows = await tx.$queryRaw<unknown[]>`
+    SELECT status, "reviewedById", "publishedAt" FROM "recipes"
+    WHERE id = ${recipeId}::uuid FOR UPDATE`;
+  return lockedRows.length === 0 ? null : parseLockedApprovalSnapshot(lockedRows[0]);
+}
+
+/** Traduce los cambios presentes a Prisma; `nutritionalInfo: null` → SQL `NULL` (`DbNull`). */
+function toRecipeUpdateData(changes: UpdateRecipeChanges): Prisma.RecipeUncheckedUpdateInput {
+  const data: Prisma.RecipeUncheckedUpdateInput = {};
+  if (changes.title !== undefined) data.title = changes.title;
+  if (changes.slug !== undefined) data.slug = changes.slug;
+  if (changes.description !== undefined) data.description = changes.description;
+  if (changes.difficulty !== undefined) data.difficulty = changes.difficulty;
+  if (changes.prepTimeMinutes !== undefined) data.prepTimeMinutes = changes.prepTimeMinutes;
+  if (changes.tags !== undefined) data.tags = [...changes.tags];
+  if (changes.ingredients !== undefined) {
+    data.ingredients = changes.ingredients.map((ingredient) => ({
+      name: ingredient.name,
+      quantity: ingredient.quantity,
+      unit: ingredient.unit,
+    }));
+  }
+  if (changes.nutritionalInfo !== undefined) {
+    // SQL NULL explícito: `Prisma.JsonNull` violaría `chk_recipes_nutritional_info_object`.
+    data.nutritionalInfo =
+      changes.nutritionalInfo === null ? Prisma.DbNull : toNutritionalInfoJson(changes.nutritionalInfo);
+  }
+  if (changes.coverImageUrl !== undefined) data.coverImageUrl = changes.coverImageUrl;
+  if (changes.videoUrl !== undefined) data.videoUrl = changes.videoUrl;
+  return data;
 }
 
 /** Lectura defensiva de la fila bloqueada (`$queryRaw` no tipa en runtime): inconsistencia → `500`. */

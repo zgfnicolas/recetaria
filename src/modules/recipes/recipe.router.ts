@@ -8,6 +8,7 @@ import {
   listMyRecipesQuerySchema,
   listRecipesQuerySchema,
   recipeIdParamsSchema,
+  updateRecipeSchema,
 } from "./recipe.schema.js";
 
 export type RecipeRouterOptions = Readonly<{
@@ -52,6 +53,12 @@ export function createRecipeRouter(
     controller.getById,
   );
   router.post("/", authGuard, validateMiddleware({ body: createRecipeSchema }), controller.create);
+  router.put(
+    "/:id",
+    authGuard,
+    validateMiddleware({ params: recipeIdParamsSchema, body: updateRecipeSchema }),
+    controller.update,
+  );
   router.put(
     "/:id/approve",
     authGuard,

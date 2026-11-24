@@ -68,6 +68,7 @@ function createHarness(options: {
   app.get("/recipes/mine", controller.listMine);
   app.get("/recipes/:id", controller.getById);
   app.put("/recipes/:id/approve", controller.approve);
+  app.put("/recipes/:id", controller.update);
   app.use(
     (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       nextErrors.push(err);
@@ -92,19 +93,22 @@ function createMockService(): {
   readonly getMine: ReturnType<typeof vi.fn<IRecipeService["getMine"]>>;
   readonly getById: ReturnType<typeof vi.fn<IRecipeService["getById"]>>;
   readonly approve: ReturnType<typeof vi.fn<IRecipeService["approve"]>>;
+  readonly update: ReturnType<typeof vi.fn<IRecipeService["update"]>>;
 } {
   const create = vi.fn<IRecipeService["create"]>().mockResolvedValue(PERSISTED);
   const list = vi.fn<IRecipeService["list"]>();
   const getMine = vi.fn<IRecipeService["getMine"]>();
   const getById = vi.fn<IRecipeService["getById"]>().mockResolvedValue(PERSISTED);
   const approve = vi.fn<IRecipeService["approve"]>().mockResolvedValue(PERSISTED);
+  const update = vi.fn<IRecipeService["update"]>().mockResolvedValue(PERSISTED);
   return {
-    service: { create, list, getMine, getById, approve },
+    service: { create, list, getMine, getById, approve, update },
     create,
     list,
     getMine,
     getById,
     approve,
+    update,
   };
 }
 
@@ -446,6 +450,82 @@ describe("RecipeController.approve", () => {
 
     // Act
     await request(app).put(`/recipes/${PERSISTED.id}/approve`);
+
+    // Assert
+    expect(nextErrors).toEqual([failure]);
+  });
+});
+
+describe("RecipeController.update", () => {
+  const BODY = { title: "Nuevo título" };
+  const VALID = { params: { id: PERSISTED.id }, body: BODY };
+
+  it("usa req.user, req.valid.params y req.valid.body (ignorando el body crudo) y responde 200 JSend", async () => {
+    // Arrange
+    const { service, update } = createMockService();
+    const { app, nextErrors } = createHarness({ service, user: ACTOR, valid: VALID });
+
+    // Act
+    const res = await request(app)
+      .put("/recipes/no-es-el-id-validado")
+      .send({ ...BODY, status: "APPROVED" });
+
+    // Assert
+    expect(nextErrors).toEqual([]);
+    expect(update).toHaveBeenCalledWith(ACTOR, PERSISTED.id, BODY);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      statusCode: 200,
+      message: "Receta actualizada exitosamente",
+      data: JSON.parse(JSON.stringify(PERSISTED)),
+    });
+  });
+
+  it("falla cerrado con 401 si falta req.user", async () => {
+    // Arrange
+    const { service, update } = createMockService();
+    const { app, nextErrors } = createHarness({ service, valid: VALID });
+
+    // Act
+    const res = await request(app).put(`/recipes/${PERSISTED.id}`).send(BODY);
+
+    // Assert
+    expect(res.status).toBe(401);
+    expect(nextErrors[0]).toBeInstanceOf(UnauthorizedError);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["req.valid.params", { body: BODY }],
+    ["req.valid.body", { params: { id: PERSISTED.id } }],
+  ])("falla cerrado con 400 si falta %s", async (_label, valid) => {
+    // Arrange
+    const { service, update } = createMockService();
+    const { app, nextErrors } = createHarness({ service, user: ACTOR, valid });
+
+    // Act
+    const res = await request(app).put(`/recipes/${PERSISTED.id}`).send(BODY);
+
+    // Assert
+    expect(res.status).toBe(400);
+    expect(nextErrors[0]).toBeInstanceOf(BadRequestError);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new NotFoundError("Receta no encontrada"),
+    new ForbiddenError("Solo el autor puede editar la receta"),
+    new ConflictError("Ya existe una receta con ese slug"),
+    new Error("inesperado"),
+  ])("delega en next(err) los errores del servicio: %s", async (failure) => {
+    // Arrange
+    const { service, update } = createMockService();
+    update.mockRejectedValueOnce(failure);
+    const { app, nextErrors } = createHarness({ service, user: ACTOR, valid: VALID });
+
+    // Act
+    await request(app).put(`/recipes/${PERSISTED.id}`).send(BODY);
 
     // Assert
     expect(nextErrors).toEqual([failure]);

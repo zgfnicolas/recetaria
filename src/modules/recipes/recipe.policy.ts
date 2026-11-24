@@ -16,3 +16,11 @@ const APPROVER_ROLE_SET: ReadonlySet<UserRole> = new Set(RECIPE_APPROVER_ROLES);
 export function canApprove(actor: Actor, recipe: Pick<RecipeRecord, "authorId">): boolean {
   return APPROVER_ROLE_SET.has(actor.role) && recipe.authorId !== actor.id;
 }
+
+/**
+ * Política pura de Edición (`RN-02`): solo el Autor original (`recipe.authorId === actor.id`).
+ * Ningún rol tiene excepción, ni siquiera `ADMIN` (`docs/roles.md`).
+ */
+export function canEdit(actor: Actor, recipe: Pick<RecipeRecord, "authorId">): boolean {
+  return recipe.authorId === actor.id;
+}
