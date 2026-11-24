@@ -130,6 +130,21 @@ export type UpdateWithOptionalResetResult =
   | Readonly<{ outcome: "updated"; recipe: RecipeRecord; resetToDraft: boolean }>
   | Readonly<{ outcome: "not_found" }>;
 
+export type DeleteWithAuditInput = Readonly<{
+  recipeId: string;
+  actorId: string;
+}>;
+
+/** Resultado de `deleteWithAudit`; `not_found` si otro borrado concurrente ganó la carrera (`404`). */
+export type DeleteWithAuditResult = Readonly<{ outcome: "deleted" }> | Readonly<{ outcome: "not_found" }>;
+
+/** Snapshot mínimo que `RN-03` conserva en `audit_logs.oldValues` tras el borrado físico. */
+export type RecipeDeletionSnapshot = Readonly<{
+  title: string;
+  authorId: string;
+  status: RecipeStatus;
+}>;
+
 export interface IRecipeRepository {
   create(data: CreateRecipeRecordInput): Promise<RecipeRecord>;
   findById(id: string): Promise<RecipeRecord | null>;
@@ -145,6 +160,11 @@ export interface IRecipeRepository {
    * a `DRAFT` (limpia `reviewedById`/`publishedAt`) e inserta `RESET_TO_DRAFT` (`RN-02`, `RN-06`).
    */
   updateWithOptionalReset(input: UpdateWithOptionalResetInput): Promise<UpdateWithOptionalResetResult>;
+  /**
+   * Inserta `DELETE` en `audit_logs` con el snapshot de la fila bloqueada y la elimina físicamente,
+   * en la misma transacción (`RN-03`, `RN-06`).
+   */
+  deleteWithAudit(input: DeleteWithAuditInput): Promise<DeleteWithAuditResult>;
 }
 
 export const RECIPE_SLUG_CONFLICT_MESSAGE = "Ya existe una receta con ese slug";
@@ -439,9 +459,76 @@ export class RecipeRepository implements IRecipeRepository {
       throw err;
     }
   }
+
+  /**
+   * Transacción interactiva `READ COMMITTED`: `SELECT … FOR UPDATE` bloquea la fila y toma el
+   * snapshot `{ title, authorId, status }`; luego inserta `DELETE` (sin FK a `recipes`, sobrevive
+   * al borrado) y elimina la fila. Un borrado concurrente espera el lock y obtiene `not_found`.
+   */
+  async deleteWithAudit(input: DeleteWithAuditInput): Promise<DeleteWithAuditResult> {
+    try {
+      return await this.#prisma.$transaction(async (tx): Promise<DeleteWithAuditResult> => {
+        const snapshot = await lockRecipeForDelete(tx, input.recipeId);
+        if (snapshot === null) {
+          return { outcome: "not_found" };
+        }
+
+        await tx.auditLog.create({
+          data: {
+            entityName: AUDIT_ENTITY_RECIPE,
+            entityId: input.recipeId,
+            action: "DELETE" satisfies RecipeAuditAction,
+            userId: input.actorId,
+            oldValues: { title: snapshot.title, authorId: snapshot.authorId, status: snapshot.status },
+            newValues: Prisma.DbNull,
+          },
+        });
+        await tx.recipe.delete({ where: { id: input.recipeId } });
+
+        return { outcome: "deleted" };
+      });
+    } catch (err: unknown) {
+      // `ADMIN` con JWT válido pero ya inexistente en `users` (FK `fk_audit_logs_user`).
+      if (hasPrismaErrorCode(err, "P2003")) {
+        throw new UnauthorizedError(INVALID_AUTHOR_MESSAGE, { cause: err });
+      }
+      throw err;
+    }
+  }
 }
 
 type TransactionClient = Parameters<Parameters<AppPrismaClient["$transaction"]>[0]>[0];
+
+/** Lectura defensiva de la fila bloqueada para el borrado: inconsistencia → `500`. */
+const lockedDeletionRowSchema = z.object({
+  title: z.string(),
+  authorId: z.uuid(),
+  status: z.enum(RECIPE_STATUSES),
+});
+
+/**
+ * Bloquea la fila (`SELECT … FOR UPDATE`) y devuelve el snapshot de `RN-03` confirmado, o `null`
+ * si no existe. Se toma aquí (no de la lectura del servicio) para auditar el título real.
+ */
+async function lockRecipeForDelete(
+  tx: TransactionClient,
+  recipeId: string,
+): Promise<RecipeDeletionSnapshot | null> {
+  const lockedRows = await tx.$queryRaw<unknown[]>`
+    SELECT title, "authorId", status FROM "recipes"
+    WHERE id = ${recipeId}::uuid FOR UPDATE`;
+  if (lockedRows.length === 0) {
+    return null;
+  }
+  const parsed = lockedDeletionRowSchema.safeParse(lockedRows[0]);
+  if (!parsed.success) {
+    throw new AppError(500, "Fila de receta bloqueada con formato inválido", {
+      isOperational: false,
+      cause: parsed.error,
+    });
+  }
+  return parsed.data;
+}
 
 /**
  * Bloquea la fila (`SELECT … FOR UPDATE`) y devuelve su estado de ciclo de vida confirmado,

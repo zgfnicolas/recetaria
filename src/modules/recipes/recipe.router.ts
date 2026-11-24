@@ -59,6 +59,12 @@ export function createRecipeRouter(
     validateMiddleware({ params: recipeIdParamsSchema, body: updateRecipeSchema }),
     controller.update,
   );
+  router.delete(
+    "/:id",
+    authGuard,
+    validateMiddleware({ params: recipeIdParamsSchema }),
+    controller.delete,
+  );
   router.put(
     "/:id/approve",
     authGuard,
