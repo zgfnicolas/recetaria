@@ -3,6 +3,8 @@ import {
   AppError,
   BadRequestError,
   ConflictError,
+  PreconditionFailedError,
+  PreconditionRequiredError,
   ForbiddenError,
   NotFoundError,
   ServiceUnavailableError,
@@ -156,6 +158,18 @@ describe("AppError (jerarquía tipada de errores operacionales)", () => {
       expectedName: "ConflictError",
       expectedStatus: 409,
       expectedDefaultMessage: "Conflicto con el estado actual del recurso",
+    },
+    {
+      SubClass: PreconditionFailedError,
+      expectedName: "PreconditionFailedError",
+      expectedStatus: 412,
+      expectedDefaultMessage: "La versión del recurso cambió",
+    },
+    {
+      SubClass: PreconditionRequiredError,
+      expectedName: "PreconditionRequiredError",
+      expectedStatus: 428,
+      expectedDefaultMessage: "Se requiere una solicitud condicional",
     },
     {
       SubClass: ServiceUnavailableError,

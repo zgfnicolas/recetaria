@@ -562,8 +562,10 @@ describe("PUT /api/v1/recipes/:id — Edición por el Autor (Integración HTTP +
         await holder.done;
       }
       const edited = await pending;
+      // El revisor aprueba con el ETag vigente tras la edición (#46)
       const approved = await request(app)
         .put(`/api/v1/recipes/${DRAFT_ID}/approve`)
+        .set("If-Match", String(edited.headers["etag"]))
         .set("Authorization", bearer(USERS.chef));
 
       // Assert

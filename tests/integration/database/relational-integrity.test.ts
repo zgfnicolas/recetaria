@@ -550,6 +550,37 @@ describe("Integridad relacional PostgreSQL 15 — migración inicial", () => {
     });
   });
 
+  describe("Versión de contenido de recipes para ETag/If-Match (#46)", () => {
+    it("inicia en 1 y el trigger la incrementa en cada UPDATE, ignorando el valor enviado", async () => {
+      // Arrange
+      const author = await createUser(db);
+      const recipe = await db.prisma.recipe.create({ data: buildRecipeData(author.id) });
+      expect(recipe.version).toBe(1);
+
+      // Act
+      await db.prisma.recipe.update({ where: { id: recipe.id }, data: { title: "Primera edición" } });
+      await db.prisma.$executeRaw`
+        UPDATE "recipes" SET "version" = 999, "prepTimeMinutes" = 45 WHERE "id" = ${recipe.id}::uuid
+      `;
+      await db.prisma.$executeRaw`UPDATE "recipes" SET "title" = "title" WHERE "id" = ${recipe.id}::uuid`;
+      const updated = await db.prisma.recipe.findUniqueOrThrow({ where: { id: recipe.id } });
+
+      // Assert — 3 UPDATE (incluido uno sin cambios reales) → versión 4; el 999 del cliente se ignora
+      expect(updated.version).toBe(4);
+    });
+
+    it("rechaza version < 1 al insertar (chk_recipes_version_positive)", async () => {
+      // Arrange
+      const author = await createUser(db);
+
+      // Act & Assert
+      await expectCheckViolation(
+        () => db.prisma.recipe.create({ data: { ...buildRecipeData(author.id), version: 0 } }),
+        "chk_recipes_version_positive",
+      );
+    });
+  });
+
   describe("Políticas referenciales y trazabilidad RN-06", () => {
     it("ON DELETE RESTRICT impide eliminar un Autor con al menos una Receta asociada", async () => {
       // Arrange

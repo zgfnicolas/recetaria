@@ -7,6 +7,8 @@ import {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  PreconditionFailedError,
+  PreconditionRequiredError,
   UnauthorizedError,
 } from "../../shared/errors/app-error.js";
 import { RecipeController } from "./recipe.controller.js";
@@ -48,6 +50,7 @@ function createHarness(options: {
   readonly service: IRecipeService;
   readonly user?: Actor | undefined;
   readonly valid?: Request["valid"] | undefined;
+  readonly preconditions?: Request["preconditions"] | undefined;
 }): { readonly app: express.Express; readonly nextErrors: unknown[] } {
   const nextErrors: unknown[] = [];
   const controller = new RecipeController(options.service);
@@ -60,6 +63,9 @@ function createHarness(options: {
     }
     if (options.valid !== undefined) {
       req.valid = options.valid;
+    }
+    if (options.preconditions !== undefined) {
+      req.preconditions = options.preconditions;
     }
     next();
   });
@@ -100,9 +106,15 @@ function createMockService(): {
   const create = vi.fn<IRecipeService["create"]>().mockResolvedValue(PERSISTED);
   const list = vi.fn<IRecipeService["list"]>();
   const getMine = vi.fn<IRecipeService["getMine"]>();
-  const getById = vi.fn<IRecipeService["getById"]>().mockResolvedValue(PERSISTED);
-  const approve = vi.fn<IRecipeService["approve"]>().mockResolvedValue(PERSISTED);
-  const update = vi.fn<IRecipeService["update"]>().mockResolvedValue(PERSISTED);
+  const getById = vi
+    .fn<IRecipeService["getById"]>()
+    .mockResolvedValue({ recipe: PERSISTED, version: 3 });
+  const approve = vi
+    .fn<IRecipeService["approve"]>()
+    .mockResolvedValue({ recipe: PERSISTED, version: 4 });
+  const update = vi
+    .fn<IRecipeService["update"]>()
+    .mockResolvedValue({ recipe: PERSISTED, version: 5 });
   const remove = vi.fn<IRecipeService["delete"]>().mockResolvedValue({ id: PERSISTED.id });
   return {
     service: { create, list, getMine, getById, approve, update, delete: remove },
@@ -341,12 +353,14 @@ describe("RecipeController.getById", () => {
     expect(nextErrors).toEqual([]);
     expect(getById).toHaveBeenCalledWith(PERSISTED.id);
     expect(res.status).toBe(200);
+    expect(res.headers["etag"]).toBe('"3"');
     expect(res.body).toEqual({
       success: true,
       statusCode: 200,
       message: "Receta obtenida exitosamente",
       data: JSON.parse(JSON.stringify(PERSISTED)),
     });
+    expect(res.body.data).not.toHaveProperty("version");
   });
 
   it("falla cerrado con 400 si falta req.valid.params sin invocar al servicio", async () => {
@@ -382,16 +396,18 @@ describe("RecipeController.getById", () => {
 
 describe("RecipeController.approve", () => {
   const REVIEWER: Actor = Object.freeze({ id: "44444444-4444-4444-8444-444444444444", role: "CHEF" });
+  const PRECONDITIONS = { ifMatch: [{ opaque: "3", weak: false }] };
 
   it("usa req.user completo y req.valid.params.id y responde 200 JSend con la Receta Aprobada", async () => {
     // Arrange
     const { service, approve } = createMockService();
     const approved: RecipeRecord = { ...PERSISTED, status: "APPROVED", reviewedById: REVIEWER.id };
-    approve.mockResolvedValueOnce(approved);
+    approve.mockResolvedValueOnce({ recipe: approved, version: 4 });
     const { app, nextErrors } = createHarness({
       service,
       user: REVIEWER,
       valid: { params: { id: PERSISTED.id } },
+      preconditions: PRECONDITIONS,
     });
 
     // Act
@@ -399,8 +415,9 @@ describe("RecipeController.approve", () => {
 
     // Assert
     expect(nextErrors).toEqual([]);
-    expect(approve).toHaveBeenCalledWith(REVIEWER, PERSISTED.id);
+    expect(approve).toHaveBeenCalledWith(REVIEWER, PERSISTED.id, PRECONDITIONS.ifMatch);
     expect(res.status).toBe(200);
+    expect(res.headers["etag"]).toBe('"4"');
     expect(res.body).toEqual({
       success: true,
       statusCode: 200,
@@ -437,9 +454,28 @@ describe("RecipeController.approve", () => {
     expect(approve).not.toHaveBeenCalled();
   });
 
+  it("falla cerrado con 428 si falta req.preconditions (ruta montada sin requireIfMatchMiddleware)", async () => {
+    // Arrange
+    const { service, approve } = createMockService();
+    const { app, nextErrors } = createHarness({
+      service,
+      user: REVIEWER,
+      valid: { params: { id: PERSISTED.id } },
+    });
+
+    // Act
+    const res = await request(app).put(`/recipes/${PERSISTED.id}/approve`);
+
+    // Assert
+    expect(res.status).toBe(428);
+    expect(nextErrors[0]).toBeInstanceOf(PreconditionRequiredError);
+    expect(approve).not.toHaveBeenCalled();
+  });
+
   it.each([
     new NotFoundError("Receta no encontrada"),
     new ForbiddenError("prohibido"),
+    new PreconditionFailedError("La versión cambió"),
     new ConflictError("La receta ya está aprobada"),
     new Error("inesperado"),
   ])("delega en next(err) los errores del servicio: %s", async (failure) => {
@@ -450,6 +486,7 @@ describe("RecipeController.approve", () => {
       service,
       user: REVIEWER,
       valid: { params: { id: PERSISTED.id } },
+      preconditions: PRECONDITIONS,
     });
 
     // Act
@@ -478,6 +515,7 @@ describe("RecipeController.update", () => {
     expect(nextErrors).toEqual([]);
     expect(update).toHaveBeenCalledWith(ACTOR, PERSISTED.id, BODY);
     expect(res.status).toBe(200);
+    expect(res.headers["etag"]).toBe('"5"');
     expect(res.body).toEqual({
       success: true,
       statusCode: 200,

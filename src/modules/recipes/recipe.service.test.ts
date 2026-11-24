@@ -1,10 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
+import type { EntityTag } from "../../shared/http/entity-tag.js";
 import type { Actor } from "../auth/index.js";
 import {
   BadRequestError,
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  PreconditionFailedError,
 } from "../../shared/errors/app-error.js";
 import type {
   CreateRecipeRecordInput,
@@ -20,6 +22,7 @@ import {
   RECIPE_DELETE_FORBIDDEN_MESSAGE,
   RECIPE_EDIT_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
+  RECIPE_VERSION_MISMATCH_MESSAGE,
   RecipeService,
 } from "./recipe.service.js";
 
@@ -59,6 +62,7 @@ function createMockRepository(): {
     typeof vi.fn<IRecipeRepository["updateWithOptionalReset"]>
   >;
   readonly deleteWithAudit: ReturnType<typeof vi.fn<IRecipeRepository["deleteWithAudit"]>>;
+  readonly findByIdWithVersion: ReturnType<typeof vi.fn<IRecipeRepository["findByIdWithVersion"]>>;
 } {
   const create = vi
     .fn<IRecipeRepository["create"]>()
@@ -66,6 +70,14 @@ function createMockRepository(): {
   const findBySlug = vi.fn<IRecipeRepository["findBySlug"]>().mockResolvedValue(null);
   const findManyPaginated = vi.fn<IRecipeRepository["findManyPaginated"]>();
   const findById = vi.fn<IRecipeRepository["findById"]>().mockResolvedValue(null);
+  // Adaptador de prueba: reutiliza los `findById.mock*` de cada caso y agrega `version: 1`
+  // (la versión vigente que envían en `If-Match` los casos de aprobación, `IF_MATCH_V1`).
+  const findByIdWithVersion = vi
+    .fn<IRecipeRepository["findByIdWithVersion"]>()
+    .mockImplementation(async (id) => {
+      const recipe = await findById(id);
+      return recipe === null ? null : { recipe, version: 1 };
+    });
   const approveWithAudit = vi.fn<IRecipeRepository["approveWithAudit"]>();
   const updateWithOptionalReset = vi.fn<IRecipeRepository["updateWithOptionalReset"]>();
   const deleteWithAudit = vi
@@ -75,6 +87,7 @@ function createMockRepository(): {
     repository: {
       create,
       findById,
+      findByIdWithVersion,
       findBySlug,
       findManyPaginated,
       approveWithAudit,
@@ -87,8 +100,12 @@ function createMockRepository(): {
     approveWithAudit,
     updateWithOptionalReset,
     deleteWithAudit,
+    findByIdWithVersion,
   };
 }
+
+/** `If-Match: "1"` (versión vigente en el adaptador de `findByIdWithVersion`). */
+const IF_MATCH_V1: readonly EntityTag[] = [{ opaque: "1", weak: false }];
 
 async function captureError(promise: Promise<unknown>): Promise<unknown> {
   try {
@@ -419,7 +436,7 @@ describe("RecipeService.getById — detalle público (HU-04)", () => {
 
     // Assert
     expect(findById).toHaveBeenCalledWith(RECIPE_ID);
-    expect(result).toBe(recipe);
+    expect(result).toEqual({ recipe, version: 1 });
   });
 
   it("lanza NotFoundError 404 cuando el repositorio devuelve null", async () => {
@@ -466,16 +483,20 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const { repository, findById, approveWithAudit } = createMockRepository();
     findById.mockResolvedValueOnce(draft());
     const approved = approvedBy(CHEF.id);
-    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approved });
+    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approved, version: 2 });
     const service = new RecipeService(repository);
 
     // Act
-    const result = await service.approve(CHEF, RECIPE_ID);
+    const result = await service.approve(CHEF, RECIPE_ID, IF_MATCH_V1);
 
     // Assert
     expect(findById).toHaveBeenCalledWith(RECIPE_ID);
-    expect(approveWithAudit).toHaveBeenCalledWith({ recipeId: RECIPE_ID, reviewerId: CHEF.id });
-    expect(result).toBe(approved);
+    expect(approveWithAudit).toHaveBeenCalledWith({
+      recipeId: RECIPE_ID,
+      reviewerId: CHEF.id,
+      expectedVersions: [1],
+    });
+    expect(result).toEqual({ recipe: approved, version: 2 });
   });
 
   it("acepta también a un NUTRITIONIST y delega su id como revisor", async () => {
@@ -484,15 +505,19 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const { repository, findById, approveWithAudit } = createMockRepository();
     findById.mockResolvedValueOnce(draft());
     const approved = approvedBy(nutritionist.id);
-    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approved });
+    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approved, version: 2 });
     const service = new RecipeService(repository);
 
     // Act
-    const result = await service.approve(nutritionist, RECIPE_ID);
+    const result = await service.approve(nutritionist, RECIPE_ID, IF_MATCH_V1);
 
     // Assert
-    expect(approveWithAudit).toHaveBeenCalledWith({ recipeId: RECIPE_ID, reviewerId: nutritionist.id });
-    expect(result).toBe(approved);
+    expect(approveWithAudit).toHaveBeenCalledWith({
+      recipeId: RECIPE_ID,
+      reviewerId: nutritionist.id,
+      expectedVersions: [1],
+    });
+    expect(result).toEqual({ recipe: approved, version: 2 });
   });
 
   it("lanza NotFoundError 404 si la receta no existe, sin escribir", async () => {
@@ -501,7 +526,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const service = new RecipeService(repository);
 
     // Act
-    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+    const err = await captureError(service.approve(CHEF, RECIPE_ID, IF_MATCH_V1));
 
     // Assert
     expect(err).toBeInstanceOf(NotFoundError);
@@ -521,7 +546,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const service = new RecipeService(repository);
 
     // Act
-    const err = await captureError(service.approve(actor, RECIPE_ID));
+    const err = await captureError(service.approve(actor, RECIPE_ID, IF_MATCH_V1));
 
     // Assert
     expect(err).toBeInstanceOf(ForbiddenError);
@@ -536,7 +561,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const service = new RecipeService(repository);
 
     // Act
-    const err = await captureError(service.approve({ id: AUTHOR_ID, role: "CHEF" }, RECIPE_ID));
+    const err = await captureError(service.approve({ id: AUTHOR_ID, role: "CHEF" }, RECIPE_ID, IF_MATCH_V1));
 
     // Assert
     expect(err).toBeInstanceOf(ForbiddenError);
@@ -549,7 +574,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const service = new RecipeService(repository);
 
     // Act
-    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+    const err = await captureError(service.approve(CHEF, RECIPE_ID, IF_MATCH_V1));
 
     // Assert
     expect(err).toBeInstanceOf(ConflictError);
@@ -565,11 +590,132 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const service = new RecipeService(repository);
 
     // Act
-    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+    const err = await captureError(service.approve(CHEF, RECIPE_ID, IF_MATCH_V1));
 
     // Assert
     expect(err).toBeInstanceOf(ConflictError);
     expect(err).toMatchObject({ statusCode: 409, message: RECIPE_ALREADY_APPROVED_MESSAGE });
+  });
+
+  it.each([
+    ["una versión distinta de la vigente", [{ opaque: "7", weak: false }]],
+    ["solo un ETag débil de la versión vigente", [{ opaque: "1", weak: true }]],
+    ["un ETag opaco que no es una versión", [{ opaque: "abc", weak: false }]],
+  ] satisfies [string, EntityTag[]][])(
+    "lanza PreconditionFailedError 412 con %s, sin escribir (#46)",
+    async (_label, ifMatch) => {
+      // Arrange
+      const { repository, findById, approveWithAudit } = createMockRepository();
+      findById.mockResolvedValueOnce(draft());
+      const service = new RecipeService(repository);
+
+      // Act
+      const err = await captureError(service.approve(CHEF, RECIPE_ID, ifMatch));
+
+      // Assert
+      expect(err).toBeInstanceOf(PreconditionFailedError);
+      expect(err).toMatchObject({ statusCode: 412, message: RECIPE_VERSION_MISMATCH_MESSAGE });
+      expect(approveWithAudit).not.toHaveBeenCalled();
+    },
+  );
+
+  it("usa la versión real leída (no una fija): con versión 3 exige If-Match \"3\" y la delega", async () => {
+    // Arrange — sin adaptador: findByIdWithVersion mockeado directamente con una versión ≠ 1
+    const { repository, findById, findByIdWithVersion, approveWithAudit } = createMockRepository();
+    findByIdWithVersion.mockResolvedValue({ recipe: draft(), version: 3 });
+    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approvedBy(CHEF.id), version: 4 });
+    const service = new RecipeService(repository);
+
+    // Act
+    const stale = await captureError(service.approve(CHEF, RECIPE_ID, IF_MATCH_V1));
+    const result = await service.approve(CHEF, RECIPE_ID, [{ opaque: "3", weak: false }]);
+
+    // Assert
+    expect(stale).toBeInstanceOf(PreconditionFailedError);
+    expect(findByIdWithVersion).toHaveBeenCalledWith(RECIPE_ID);
+    expect(findById).not.toHaveBeenCalled();
+    expect(approveWithAudit).toHaveBeenCalledTimes(1);
+    expect(approveWithAudit).toHaveBeenCalledWith({
+      recipeId: RECIPE_ID,
+      reviewerId: CHEF.id,
+      expectedVersions: [3],
+    });
+    expect(result.version).toBe(4);
+  });
+
+  it("getById devuelve la versión real del repositorio", async () => {
+    // Arrange
+    const { repository, findByIdWithVersion } = createMockRepository();
+    findByIdWithVersion.mockResolvedValueOnce({ recipe: draft(), version: 7 });
+    const service = new RecipeService(repository);
+
+    // Act
+    const result = await service.getById(RECIPE_ID);
+
+    // Assert
+    expect(result.version).toBe(7);
+  });
+
+  it.each([
+    ["404 (receta inexistente)", null, NotFoundError],
+    ["403 RN-05 (auto-aprobación)", "self", ForbiddenError],
+  ] as const)("prioriza %s sobre 412 aunque el If-Match no coincida", async (_label, scenario, ErrorClass) => {
+    // Arrange
+    const { repository, findByIdWithVersion } = createMockRepository();
+    findByIdWithVersion.mockResolvedValueOnce(scenario === null ? null : { recipe: draft(), version: 3 });
+    const service = new RecipeService(repository);
+    const actor: Actor = scenario === "self" ? { id: AUTHOR_ID, role: "CHEF" } : CHEF;
+
+    // Act
+    const err = await captureError(service.approve(actor, RECIPE_ID, [{ opaque: "999", weak: false }]));
+
+    // Assert
+    expect(err).toBeInstanceOf(ErrorClass);
+  });
+
+  it("acepta una lista If-Match si alguna etiqueta fuerte coincide con la vigente", async () => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approvedBy(CHEF.id), version: 2 });
+    const service = new RecipeService(repository);
+
+    // Act
+    await service.approve(CHEF, RECIPE_ID, [
+      { opaque: "9", weak: false },
+      { opaque: "1", weak: false },
+    ]);
+
+    // Assert
+    expect(approveWithAudit).toHaveBeenCalledWith(expect.objectContaining({ expectedVersions: [9, 1] }));
+  });
+
+  it("prioriza 412 sobre 409: con una versión vieja de una receta ya aprobada responde 412", async () => {
+    // Arrange
+    const { repository, findById } = createMockRepository();
+    findById.mockResolvedValueOnce(approvedBy("55555555-5555-4555-8555-555555555555"));
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(CHEF, RECIPE_ID, [{ opaque: "7", weak: false }]));
+
+    // Assert
+    expect(err).toBeInstanceOf(PreconditionFailedError);
+  });
+
+  it("lanza PreconditionFailedError 412 si la fila bloqueada cambió de versión (edición concurrente)", async () => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    approveWithAudit.mockResolvedValueOnce({ outcome: "precondition_failed" });
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(CHEF, RECIPE_ID, IF_MATCH_V1));
+
+    // Assert
+    expect(err).toBeInstanceOf(PreconditionFailedError);
+    expect(err).toMatchObject({ statusCode: 412, message: RECIPE_VERSION_MISMATCH_MESSAGE });
   });
 
   it("lanza NotFoundError 404 si la transacción ya no encuentra la receta (borrado concurrente)", async () => {
@@ -580,7 +726,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const service = new RecipeService(repository);
 
     // Act
-    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+    const err = await captureError(service.approve(CHEF, RECIPE_ID, IF_MATCH_V1));
 
     // Assert
     expect(err).toBeInstanceOf(NotFoundError);
@@ -596,7 +742,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     const service = new RecipeService(repository);
 
     // Act
-    const err = await captureError(service.approve(CHEF, RECIPE_ID));
+    const err = await captureError(service.approve(CHEF, RECIPE_ID, IF_MATCH_V1));
 
     // Assert
     expect(err).toBe(failure);
@@ -615,6 +761,7 @@ describe("RecipeService.update — Edición por el Autor (HU-05, RN-02, RN-07)",
       Promise.resolve({
         outcome: "updated",
         recipe: { ...existing(), ...changes },
+        version: 2,
         resetToDraft: false,
       }),
     );
@@ -644,6 +791,7 @@ describe("RecipeService.update — Edición por el Autor (HU-05, RN-02, RN-07)",
     mocks.updateWithOptionalReset.mockResolvedValue({
       outcome: "updated",
       recipe: existing(),
+      version: 2,
       resetToDraft: false,
     });
     const service = new RecipeService(mocks.repository, { generateSlug });
@@ -663,7 +811,12 @@ describe("RecipeService.update — Edición por el Autor (HU-05, RN-02, RN-07)",
     const { service, findById, updateWithOptionalReset } = arrange();
     findById.mockResolvedValueOnce({ ...existing(), status: "APPROVED", reviewedById: "r", publishedAt: new Date() });
     const reset: RecipeRecord = { ...existing(), status: "DRAFT", reviewedById: null, publishedAt: null };
-    updateWithOptionalReset.mockResolvedValueOnce({ outcome: "updated", recipe: reset, resetToDraft: true });
+    updateWithOptionalReset.mockResolvedValueOnce({
+      outcome: "updated",
+      recipe: reset,
+      version: 5,
+      resetToDraft: true,
+    });
 
     // Act
     const result = await service.update(AUTHOR, RECIPE_ID, { description: "Descripción nueva y larga." });
@@ -674,7 +827,7 @@ describe("RecipeService.update — Edición por el Autor (HU-05, RN-02, RN-07)",
       actorId: AUTHOR_ID,
       changes: { description: "Descripción nueva y larga." },
     });
-    expect(result).toBe(reset);
+    expect(result).toEqual({ recipe: reset, version: 5 });
   });
 
   it("lanza NotFoundError 404 si la receta no existe, sin escribir", async () => {

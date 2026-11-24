@@ -1,4 +1,5 @@
 export { RecipeController } from "./recipe.controller.js";
+export { formatRecipeETag, toRecipeVersions } from "./recipe.etag.js";
 export { canApprove, canDelete, canEdit, RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
 export {
   AUDIT_ENTITY_RECIPE,
@@ -23,6 +24,7 @@ export {
   type UpdateRecipeChanges,
   type UpdateWithOptionalResetInput,
   type UpdateWithOptionalResetResult,
+  type VersionedRecipe,
 } from "./recipe.repository.js";
 export { createRecipeRouter, type RecipeRouterOptions } from "./recipe.router.js";
 export {
@@ -60,6 +62,7 @@ export {
   RECIPE_DELETE_FORBIDDEN_MESSAGE,
   RECIPE_EDIT_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
+  RECIPE_VERSION_MISMATCH_MESSAGE,
   RecipeService,
   type DeletedRecipe,
   type IRecipeService,
