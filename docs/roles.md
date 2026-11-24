@@ -3,13 +3,13 @@
 ## Roles
 | Rol | Quién es | Cómo obtiene el rol en el MVP |
 |---|---|---|
-| Administrador (`ADMIN`) | Operador interno con permiso global de moderación de borrado | Parámetro `role: "ADMIN"` en `/api/v1/auth/register` o usuario semilla (`admin@recetaria.com`) |
-| Nutricionista (`NUTRITIONIST`) | Revisor profesional habilitado para validar y aprobar recetas | Parámetro `role: "NUTRITIONIST"` en `/api/v1/auth/register` o usuario semilla (`nutri@recetaria.com`) |
-| Chef (`CHEF`) | Revisor profesional gastronómico habilitado para aprobar recetas | Parámetro `role: "CHEF"` en `/api/v1/auth/register` o usuario semilla (`chef@recetaria.com`) |
-| Usuario Final (`USER`) | Persona registrada que publica y gestiona sus recetas | Autoregistro en `POST /api/v1/auth/register` (rol por defecto) o semilla (`user@recetaria.com`) |
+| Administrador (`ADMIN`) | Operador interno con permiso global de moderación de borrado | Solo usuario semilla (`admin@recetaria.com`, `npm run db:seed`) o SQL manual; `/register` no acepta `role` (ADR-0007) |
+| Nutricionista (`NUTRITIONIST`) | Revisor profesional habilitado para validar y aprobar recetas | Solo usuario semilla (`nutri@recetaria.com`) o SQL manual |
+| Chef (`CHEF`) | Revisor profesional gastronómico habilitado para aprobar recetas | Solo usuario semilla (`chef@recetaria.com`) o SQL manual |
+| Usuario Final (`USER`) | Persona registrada que publica y gestiona sus recetas | Autoregistro en `POST /api/v1/auth/register` (el servidor asigna siempre `USER`; enviar `role` → `400`) o semilla (`user@recetaria.com`) |
 | Visitante (`Guest`) | Persona sin sesión iniciada | Acceso anónimo sin token JWT |
 
-*(Nota: en fases posteriores a la entrega del MVP, el otorgamiento de roles `CHEF`, `NUTRITIONIST` y `ADMIN` pasará a validación KYC por un administrador).*
+*(Nota: desde #48 / ADR-0007 el registro público no permite elegir rol. En fases posteriores al MVP, el otorgamiento de `CHEF`, `NUTRITIONIST` y `ADMIN` pasará por un endpoint de administración auditado o por validación KYC).*
 
 ## Matriz de permisos
 | Acción | Admin | Nutricionista | Chef | Usuario | Visitante |

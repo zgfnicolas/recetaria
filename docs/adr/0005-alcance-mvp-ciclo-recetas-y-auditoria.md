@@ -1,7 +1,7 @@
 # 5. Alcance del MVP, ciclo de vida de recetas y auditoría transaccional
 
 Fecha: 2026-11-18
-Estado: Aceptada
+Estado: Aceptada (el punto "`role` opcional en `/auth/register`" fue reemplazado por [ADR-0007](0007-registro-publico-sin-asignacion-de-rol.md), #48)
 
 ## Contexto
 Al contrastar la documentación inicial con la consigna del Trabajo Práctico Integrador (10 requisitos mínimos + 4 extras opcionales), surgieron ambigüedades: una tabla `sessions` sin endpoints en un sistema JWT stateless, cuatro estados de receta sin transiciones hacia `PENDING_REVIEW`/`REJECTED`/`ARCHIVED`, ocultamiento de borradores en `GET` públicos y falta de separación explícita entre validación de formato y reglas de negocio en `Service`.

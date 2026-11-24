@@ -4,7 +4,7 @@ import { loginSchema, MAX_BCRYPT_PASSWORD_BYTES, registerSchema } from "./auth.s
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 
 describe("registerSchema (Zod 4 strictObject / BOPLA)", () => {
-  it("acepta un payload válido, normaliza email/nombres, preserva password y aplica role 'USER' por defecto", () => {
+  it("acepta un payload válido, normaliza email/nombres y preserva password, sin campo role (#48)", () => {
     // Arrange
     const rawPayload = {
       email: "  Ana.Chef@Recetaria.COM  ",
@@ -24,30 +24,48 @@ describe("registerSchema (Zod 4 strictObject / BOPLA)", () => {
         password: "  Cl4ve con espac1os  ",
         firstName: "Ana María",
         lastName: "Pérez",
-        role: "USER",
       });
+      expect(parsed.data).not.toHaveProperty("role");
     }
   });
 
-  it.each(EXPECTED_MVP_ROLES)("acepta el rol explícito %s según docs/roles.md", (role) => {
-    // Arrange
-    const payload = {
-      email: `${role.toLowerCase()}@recetaria.com`,
-      password: "password123",
-      firstName: "Usuario",
-      lastName: "Valido",
-      role,
-    };
+  it.each([...EXPECTED_MVP_ROLES, "SUPERADMIN", "user", null, ["ADMIN"], { name: "ADMIN" }])(
+    "rechaza role = %j como campo no permitido, incluido USER (BFLA/mass assignment, #48)",
+    (role) => {
+      // Arrange
+      const payload = {
+        email: "usuario@recetaria.com",
+        password: "password123",
+        firstName: "Usuario",
+        lastName: "Valido",
+        role,
+      };
 
-    // Act
-    const parsed = registerSchema.safeParse(payload);
+      // Act
+      const parsed = registerSchema.safeParse(payload);
 
-    // Assert
-    expect(parsed.success).toBe(true);
-    if (parsed.success) {
-      expect(parsed.data.role).toBe(role);
-    }
-  });
+      // Assert — mismo camino BOPLA que cualquier clave extra: no enumera los roles existentes
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues).toEqual([
+        expect.objectContaining({ code: "unrecognized_keys", keys: ["role"] }),
+      ]);
+    },
+  );
+
+  it.each(["Role", "ROLE", "isActive", "id", "passwordHash"])(
+    "rechaza la clave protegida %s (mass assignment)",
+    (key) => {
+      const parsed = registerSchema.safeParse({
+        email: "usuario@recetaria.com",
+        password: "password123",
+        firstName: "Usuario",
+        lastName: "Valido",
+        [key]: "ADMIN",
+      });
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: [key] });
+    },
+  );
 
   it("acepta fronteras válidas (email 255 chars, nombres 100 chars, password 8 chars y 72 bytes UTF-8)", () => {
     // Arrange
@@ -194,30 +212,6 @@ describe("registerSchema (Zod 4 strictObject / BOPLA)", () => {
       expectedField: "lastName",
       expectedMessage: "El apellido no puede superar los 100 caracteres",
     },
-    {
-      label: "rol fuera de catálogo (SUPERADMIN)",
-      payload: {
-        email: "ana@recetaria.com",
-        password: "password123",
-        firstName: "Ana",
-        lastName: "Pérez",
-        role: "SUPERADMIN",
-      },
-      expectedField: "role",
-      expectedMessage: "Rol inválido",
-    },
-    {
-      label: "rol en minúsculas fuera de enum (user)",
-      payload: {
-        email: "ana@recetaria.com",
-        password: "password123",
-        firstName: "Ana",
-        lastName: "Pérez",
-        role: "user",
-      },
-      expectedField: "role",
-      expectedMessage: "Rol inválido",
-    },
   ])(
     "rechaza $label reportando campo y mensaje exacto",
     ({ payload, expectedField, expectedMessage }) => {
@@ -245,7 +239,6 @@ describe("registerSchema (Zod 4 strictObject / BOPLA)", () => {
   it.each([
     { label: "email numérico", payload: { email: 123, password: "password123", firstName: "Ana", lastName: "Pérez" } },
     { label: "password null", payload: { email: "ana@recetaria.com", password: null, firstName: "Ana", lastName: "Pérez" } },
-    { label: "role null", payload: { email: "ana@recetaria.com", password: "password123", firstName: "Ana", lastName: "Pérez", role: null } },
     { label: "raíz null", payload: null },
     { label: "raíz array", payload: [] },
     { label: "raíz string", payload: "texto" },

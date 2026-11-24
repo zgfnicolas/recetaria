@@ -8,6 +8,7 @@ import {
   type Database,
 } from "../../../src/infrastructure/database/prisma.js";
 import { UserRepository, type JwtConfig } from "../../../src/modules/auth/index.js";
+import { createUserWithRole } from "../../support/users.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const UUID_V4_PATTERN =
@@ -57,14 +58,17 @@ describe("POST /api/v1/auth/login — Integración HTTP (Supertest + PostgreSQL 
       const email = `${role.toLowerCase()}@recetaria.com`;
       const password = "test-password-example";
 
-      const registerRes = await request(app).post("/api/v1/auth/register").send({
-        email,
-        password,
-        firstName: "Usuario",
-        lastName: "Activo",
-        role,
-      });
-      expect(registerRes.status).toBe(201);
+      // Roles privilegiados: solo por seed (#48, ADR-0007); `USER` por el registro público real
+      const registered =
+        role === "USER"
+          ? await request(app)
+              .post("/api/v1/auth/register")
+              .send({ email, password, firstName: "Usuario", lastName: "Activo" })
+              .then((res) => {
+                expect(res.status).toBe(201);
+                return { id: String(res.body.data.id) };
+              })
+          : await createUserWithRole(db, { email, role, password, lastName: "Activo" });
 
       // Act
       const loginRes = await request(app).post("/api/v1/auth/login").send({
@@ -96,7 +100,8 @@ describe("POST /api/v1/auth/login — Integración HTTP (Supertest + PostgreSQL 
 
       // Assert no-fuga en respuesta y logs
       const issuedToken: string = loginRes.body.data.token;
-      expect(logs).toHaveLength(2);
+      // USER: register + login; roles sembrados: solo login
+      expect(logs).toHaveLength(role === "USER" ? 2 : 1);
       expect(logs.join("\n")).not.toContain(password);
       expect(logs.join("\n")).not.toContain(issuedToken);
       expect(logs.join("\n")).not.toContain("$2b$");
@@ -115,7 +120,7 @@ describe("POST /api/v1/auth/login — Integración HTTP (Supertest + PostgreSQL 
       expect(verified).not.toBeNull();
       if (typeof verified === "object" && verified !== null) {
         expect(Object.keys(verified).sort()).toEqual(["exp", "iat", "id", "role"]);
-        expect(verified["id"]).toBe(registerRes.body.data.id);
+        expect(verified["id"]).toBe(registered.id);
         expect(verified["role"]).toBe(role);
         expect(typeof verified.iat).toBe("number");
         expect(typeof verified.exp).toBe("number");

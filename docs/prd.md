@@ -1,5 +1,5 @@
 # PRD — Recetaria API
-Versión 1.3 · Última actualización: 2026-11-21 · Responsable: Facundo Nicolás González
+Versión 1.4 · Última actualización: 2026-11-24 · Responsable: Facundo Nicolás González
 
 ## 1. Visión
 Centralizar un catálogo confiable de recetas gastronómicas donde el contenido generado por la comunidad es validado clínica y culinariamente por nutricionistas y chefs profesionales.
@@ -20,7 +20,7 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 ### Incluido en la versión 1 (MVP)
 - **Base arquitectónica:** Node.js 24 LTS, ESM nativo (`nodenext`), Express 5, TypeScript 7 estricto (`tsx` en desarrollo) y PostgreSQL 15 + Prisma 7 GA (`@prisma/adapter-pg`) organizados por componentes (`auth`, `recipes`) en 4 capas (`Router -> Controller -> Service -> Repository`), con `src/app.ts` separado de `src/server.ts`.
 - **Modelos activos (3):** `User`, `Recipe` y `AuditLog` (autenticación 100 % stateless sin tabla `sessions`).
-- **Seguridad e identidad:** registro (`POST /api/v1/auth/register` con `role` opcional para pruebas) y login (`POST /api/v1/auth/login`) con Bcrypt (`>= 10` rounds), rechazo `401` si `isActive === false` y Bearer JWT (`{ id, role }`), más usuarios semilla (*seed*) para los 4 roles.
+- **Seguridad e identidad:** registro (`POST /api/v1/auth/register`, que crea siempre `USER` y rechaza `role` con `400`, ADR-0007) y login (`POST /api/v1/auth/login`) con Bcrypt (`>= 10` rounds), rechazo `401` si `isActive === false` y Bearer JWT (`{ id, role }`), más usuarios semilla (*seed*) para los 4 roles.
 - **CRUD de recetas:** alta (`POST /api/v1/recipes`), lectura pública paginada (`GET /api/v1/recipes` con `?page=&limit=`, `GET /api/v1/recipes/:id`), consulta autenticada de recetas propias (`GET /api/v1/recipes/mine`), edición parcial o completa por el autor (`PUT /api/v1/recipes/:id`) y borrado físico por el autor o `ADMIN` (`DELETE /api/v1/recipes/:id`).
 - **Validaciones:** Zod 4 estricto (`z.strictObject`) en middleware para formato/tipos/prevención BOPLA (incluyendo `tags` acotado y `nutritionalInfo` tipado) y validaciones explícitas de negocio en `RecipeService` (`prepTimeMinutes` entre `1` y `1440`, ingredientes con `quantity > 0`, ownership, bloqueo de auto-aprobación y detección de receta ya aprobada).
 - **Aprobación profesional:** transición `DRAFT -> APPROVED` en `PUT /api/v1/recipes/:id/approve` exclusiva de `CHEF`/`NUTRITIONIST` con registro en `audit_logs` (`entityName = "Recipe"`) dentro de `prisma.$transaction`.
@@ -37,7 +37,7 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 ## 6. Historias de usuario
 | ID | Como... | Quiero... | Para... | Prioridad |
 |---|---|---|---|---|
-| HU-01 | visitante | registrarme con email, nombre, apellido, contraseña y rol opcional | crear una cuenta con credenciales seguras | Alta |
+| HU-01 | visitante | registrarme con email, nombre, apellido y contraseña | crear una cuenta con credenciales seguras | Alta |
 | HU-02 | usuario registrado | iniciar sesión con email y contraseña | obtener un token JWT válido y operar rutas protegidas | Alta |
 | HU-03 | usuario autenticado | crear una receta con ingredientes y tiempo de preparación | compartirla en estado `DRAFT` con `slug` automático | Alta |
 | HU-04 | visitante o usuario | listar, ver detalle y filtrar recetas por estado, dificultad o autor | encontrar platos acordes a mis necesidades | Alta |
@@ -48,7 +48,8 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 ### Criterios de aceptación
 
 **HU-01 — Registro de usuario**
-- Dado un payload válido con email no registrado, contraseña de al menos 8 caracteres y `role` opcional (`USER`, `CHEF`, `NUTRITIONIST` o `ADMIN`; por defecto `USER`), cuando se envía `POST /api/v1/auth/register`, entonces la contraseña se almacena hasheada con Bcrypt (`>= 10` rounds) y retorna HTTP `201 Created`.
+- Dado un payload válido con email no registrado y contraseña de al menos 8 caracteres, cuando se envía `POST /api/v1/auth/register`, entonces se crea un usuario con rol `USER` asignado por el servidor, la contraseña se almacena hasheada con Bcrypt (`>= 10` rounds) y retorna HTTP `201 Created`.
+- Dado un payload que incluye `role` (con cualquier valor, incluido `USER`), cuando se envía `POST /api/v1/auth/register`, entonces retorna HTTP `400 Bad Request` ("Campo no permitido") y no se crea el usuario (BFLA/mass assignment, #48).
 - Dado un email ya registrado, cuando se envía `POST /api/v1/auth/register`, entonces retorna HTTP `409 Conflict`.
 
 **HU-02 — Inicio de sesión**
@@ -90,5 +91,5 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 
 ## 9. Supuestos y riesgos
 - **Alcance congelado para el MVP:** se diferen funcionalidades sociales, subida a S3, KYC documental y `sessions` persistentes para respetar la entrega de 2 semanas sin deuda de estados huérfanos.
-- **Alta de roles para evaluación:** `POST /api/v1/auth/register` admite `role` opcional y [`prisma/seed.ts`](../prisma/seed.ts) (`npx prisma db seed` / `npm run db:seed`) siembra de forma idempotente los 4 usuarios base (`user`, `chef`, `nutri`, `admin`) para probar todos los flujos en Thunder Client; en una fase productiva futura el alta de roles privilegiados se restringirá vía KYC.
+- **Alta de roles para evaluación:** el registro público crea siempre `USER` (ADR-0007, #48). Los roles privilegiados se obtienen **solo** con [`prisma/seed.ts`](../prisma/seed.ts) (`npx prisma db seed` / `npm run db:seed`, únicamente con `NODE_ENV=development|test`), que siembra de forma idempotente los 4 usuarios base (`user`, `chef`, `nutri`, `admin`) para probar todos los flujos en Thunder Client. En una fase productiva futura, el alta de roles privilegiados pasará por un endpoint de administración auditado o por KYC.
 - **Filtros sobre JSONB:** las búsquedas iniciales indexan columnas escalares (`status`, `difficulty`, `authorId`); el parseo avanzado dentro de `ingredients` queda para fases posteriores.
