@@ -24,3 +24,11 @@ export function canApprove(actor: Actor, recipe: Pick<RecipeRecord, "authorId">)
 export function canEdit(actor: Actor, recipe: Pick<RecipeRecord, "authorId">): boolean {
   return recipe.authorId === actor.id;
 }
+
+/**
+ * Política pura de Eliminación física (`RN-03`): el Autor original o un `ADMIN` (moderación).
+ * Un `CHEF`/`NUTRITIONIST` que no sea el Autor no puede eliminar.
+ */
+export function canDelete(actor: Actor, recipe: Pick<RecipeRecord, "authorId">): boolean {
+  return recipe.authorId === actor.id || actor.role === "ADMIN";
+}

@@ -17,6 +17,7 @@ import {
   BUSINESS_VALIDATION_MESSAGE,
   RECIPE_ALREADY_APPROVED_MESSAGE,
   RECIPE_APPROVAL_FORBIDDEN_MESSAGE,
+  RECIPE_DELETE_FORBIDDEN_MESSAGE,
   RECIPE_EDIT_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
   RecipeService,
@@ -57,6 +58,7 @@ function createMockRepository(): {
   readonly updateWithOptionalReset: ReturnType<
     typeof vi.fn<IRecipeRepository["updateWithOptionalReset"]>
   >;
+  readonly deleteWithAudit: ReturnType<typeof vi.fn<IRecipeRepository["deleteWithAudit"]>>;
 } {
   const create = vi
     .fn<IRecipeRepository["create"]>()
@@ -66,6 +68,9 @@ function createMockRepository(): {
   const findById = vi.fn<IRecipeRepository["findById"]>().mockResolvedValue(null);
   const approveWithAudit = vi.fn<IRecipeRepository["approveWithAudit"]>();
   const updateWithOptionalReset = vi.fn<IRecipeRepository["updateWithOptionalReset"]>();
+  const deleteWithAudit = vi
+    .fn<IRecipeRepository["deleteWithAudit"]>()
+    .mockResolvedValue({ outcome: "deleted" });
   return {
     repository: {
       create,
@@ -74,12 +79,14 @@ function createMockRepository(): {
       findManyPaginated,
       approveWithAudit,
       updateWithOptionalReset,
+      deleteWithAudit,
     },
     create,
     findManyPaginated,
     findById,
     approveWithAudit,
     updateWithOptionalReset,
+    deleteWithAudit,
   };
 }
 
@@ -782,6 +789,91 @@ describe("RecipeService.update — Edición por el Autor (HU-05, RN-02, RN-07)",
 
     // Assert
     expect(err).toBe(conflict);
+  });
+});
+
+describe("RecipeService.delete — Eliminación física (HU-06, RN-03)", () => {
+  const OTHER = "88888888-8888-4888-8888-888888888888";
+
+  it.each([
+    ["el Autor (USER)", { id: AUTHOR_ID, role: "USER" } satisfies Actor],
+    ["el Autor con rol CHEF", { id: AUTHOR_ID, role: "CHEF" } satisfies Actor],
+    ["un ADMIN ajeno", { id: OTHER, role: "ADMIN" } satisfies Actor],
+  ])("permite eliminar a %s delegando recipeId y actorId", async (_label, actor) => {
+    // Arrange
+    const { repository, findById, deleteWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(toRecord(buildRecordInput()));
+    const service = new RecipeService(repository);
+
+    // Act
+    const result = await service.delete(actor, RECIPE_ID);
+
+    // Assert
+    expect(findById).toHaveBeenCalledWith(RECIPE_ID);
+    expect(deleteWithAudit).toHaveBeenCalledWith({ recipeId: RECIPE_ID, actorId: actor.id });
+    expect(result).toEqual({ id: RECIPE_ID });
+  });
+
+  it("lanza NotFoundError 404 si la receta no existe, sin escribir", async () => {
+    // Arrange
+    const { repository, deleteWithAudit } = createMockRepository();
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.delete({ id: AUTHOR_ID, role: "USER" }, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(NotFoundError);
+    expect(err).toMatchObject({ statusCode: 404, message: RECIPE_NOT_FOUND_MESSAGE });
+    expect(deleteWithAudit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["otro USER", { id: OTHER, role: "USER" } satisfies Actor],
+    ["un CHEF ajeno", { id: OTHER, role: "CHEF" } satisfies Actor],
+    ["un NUTRITIONIST ajeno", { id: OTHER, role: "NUTRITIONIST" } satisfies Actor],
+  ])("lanza ForbiddenError 403 para %s, sin escribir", async (_label, actor) => {
+    // Arrange
+    const { repository, findById, deleteWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(toRecord(buildRecordInput()));
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.delete(actor, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(ForbiddenError);
+    expect(err).toMatchObject({ statusCode: 403, message: RECIPE_DELETE_FORBIDDEN_MESSAGE });
+    expect(deleteWithAudit).not.toHaveBeenCalled();
+  });
+
+  it("lanza NotFoundError 404 si un borrado concurrente ganó la carrera", async () => {
+    // Arrange
+    const { repository, findById, deleteWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(toRecord(buildRecordInput()));
+    deleteWithAudit.mockResolvedValueOnce({ outcome: "not_found" });
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.delete({ id: AUTHOR_ID, role: "USER" }, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(NotFoundError);
+  });
+
+  it("propaga errores del repositorio sin envolverlos", async () => {
+    // Arrange
+    const { repository, findById, deleteWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(toRecord(buildRecordInput()));
+    const failure = new Error("timeout");
+    deleteWithAudit.mockRejectedValueOnce(failure);
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.delete({ id: AUTHOR_ID, role: "USER" }, RECIPE_ID));
+
+    // Assert
+    expect(err).toBe(failure);
   });
 });
 

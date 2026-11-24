@@ -70,7 +70,7 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 | `GET` | `/api/v1/recipes/:id` | Público | Obtiene el detalle de una receta (`DRAFT` o `APPROVED`) por UUID v4; comparte el rate limit de 120 req/min por IP del catálogo | `200`, `400`, `404`, `429` |
 | `POST` | `/api/v1/recipes` | Autenticado (JWT) | Crea una receta en estado `DRAFT` con `slug` automático y validaciones `RN-07` en servicio | `201`, `400`, `401`, `409` |
 | `PUT` | `/api/v1/recipes/:id` | Autor (`RN-02`) | Actualiza parcial o totalmente la receta propia (al menos 1 campo; solo cambia lo enviado; `null` vacía `nutritionalInfo`/`coverImageUrl`/`videoUrl`; `title` regenera el `slug`); si estaba `APPROVED`, reinicia a `DRAFT` con registro `RESET_TO_DRAFT` en `audit_logs` | `200`, `400`, `401`, `403`, `404`, `409` |
-| `DELETE` | `/api/v1/recipes/:id` | Autor o `ADMIN` (`RN-03`) | Elimina físicamente la receta dentro de `$transaction` registrando `DELETE` con snapshot en `audit_logs` | `200`, `400`, `401`, `403`, `404` |
+| `DELETE` | `/api/v1/recipes/:id` | Autor o `ADMIN` (`RN-03`) | Elimina físicamente la receta dentro de `$transaction` registrando `DELETE` con snapshot `{ title, authorId, status }` en `audit_logs` (sobrevive al borrado); responde `data: { id }` | `200`, `400`, `401`, `403`, `404` |
 | `PUT` | `/api/v1/recipes/:id/approve` | `CHEF` o `NUTRITIONIST` ≠ Autor (`RN-04`, `RN-05`) | Aprueba receta `DRAFT → APPROVED` dentro de `$transaction` registrando `APPROVE` en `audit_logs` | `200`, `400`, `401`, `403`, `404`, `409` |
 
 ## Extras opcionales implementados

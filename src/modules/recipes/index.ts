@@ -1,5 +1,5 @@
 export { RecipeController } from "./recipe.controller.js";
-export { canApprove, canEdit, RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
+export { canApprove, canDelete, canEdit, RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
 export {
   AUDIT_ENTITY_RECIPE,
   INVALID_AUTHOR_MESSAGE,
@@ -9,12 +9,15 @@ export {
   type ApproveWithAuditInput,
   type ApproveWithAuditResult,
   type CreateRecipeRecordInput,
+  type DeleteWithAuditInput,
+  type DeleteWithAuditResult,
   type FindManyPaginatedParams,
   type IRecipeRepository,
   type PaginatedRecipes,
   type PaginationMeta,
   type RecipeApprovalSnapshot,
   type RecipeAuditAction,
+  type RecipeDeletionSnapshot,
   type RecipeListFilters,
   type RecipeRecord,
   type UpdateRecipeChanges,
@@ -54,9 +57,11 @@ export {
   BUSINESS_VALIDATION_MESSAGE,
   RECIPE_ALREADY_APPROVED_MESSAGE,
   RECIPE_APPROVAL_FORBIDDEN_MESSAGE,
+  RECIPE_DELETE_FORBIDDEN_MESSAGE,
   RECIPE_EDIT_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
   RecipeService,
+  type DeletedRecipe,
   type IRecipeService,
   type RecipeServiceOptions,
   type SlugGenerator,

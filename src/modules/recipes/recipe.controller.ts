@@ -136,6 +136,21 @@ export class RecipeController {
     }
   };
 
+  readonly delete = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = readActor(req);
+      const { id } = readValidatedParams<RecipeIdParamsDTO>(req);
+      const deleted = await this.#recipeService.delete(actor, id);
+      sendSuccess(res, {
+        statusCode: 200,
+        message: "Receta eliminada exitosamente",
+        data: deleted,
+      });
+    } catch (err: unknown) {
+      next(err);
+    }
+  };
+
   readonly approve = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const actor = readActor(req);

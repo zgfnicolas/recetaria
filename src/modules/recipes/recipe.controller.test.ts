@@ -69,6 +69,7 @@ function createHarness(options: {
   app.get("/recipes/:id", controller.getById);
   app.put("/recipes/:id/approve", controller.approve);
   app.put("/recipes/:id", controller.update);
+  app.delete("/recipes/:id", controller.delete);
   app.use(
     (err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
       nextErrors.push(err);
@@ -94,6 +95,7 @@ function createMockService(): {
   readonly getById: ReturnType<typeof vi.fn<IRecipeService["getById"]>>;
   readonly approve: ReturnType<typeof vi.fn<IRecipeService["approve"]>>;
   readonly update: ReturnType<typeof vi.fn<IRecipeService["update"]>>;
+  readonly remove: ReturnType<typeof vi.fn<IRecipeService["delete"]>>;
 } {
   const create = vi.fn<IRecipeService["create"]>().mockResolvedValue(PERSISTED);
   const list = vi.fn<IRecipeService["list"]>();
@@ -101,14 +103,16 @@ function createMockService(): {
   const getById = vi.fn<IRecipeService["getById"]>().mockResolvedValue(PERSISTED);
   const approve = vi.fn<IRecipeService["approve"]>().mockResolvedValue(PERSISTED);
   const update = vi.fn<IRecipeService["update"]>().mockResolvedValue(PERSISTED);
+  const remove = vi.fn<IRecipeService["delete"]>().mockResolvedValue({ id: PERSISTED.id });
   return {
-    service: { create, list, getMine, getById, approve, update },
+    service: { create, list, getMine, getById, approve, update, delete: remove },
     create,
     list,
     getMine,
     getById,
     approve,
     update,
+    remove,
   };
 }
 
@@ -526,6 +530,76 @@ describe("RecipeController.update", () => {
 
     // Act
     await request(app).put(`/recipes/${PERSISTED.id}`).send(BODY);
+
+    // Assert
+    expect(nextErrors).toEqual([failure]);
+  });
+});
+
+describe("RecipeController.delete", () => {
+  const VALID = { params: { id: PERSISTED.id } };
+
+  it("usa req.user y req.valid.params.id y responde 200 JSend confirmando el id", async () => {
+    // Arrange
+    const { service, remove } = createMockService();
+    const { app, nextErrors } = createHarness({ service, user: ACTOR, valid: VALID });
+
+    // Act
+    const res = await request(app).delete("/recipes/no-es-el-id-validado");
+
+    // Assert
+    expect(nextErrors).toEqual([]);
+    expect(remove).toHaveBeenCalledWith(ACTOR, PERSISTED.id);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      statusCode: 200,
+      message: "Receta eliminada exitosamente",
+      data: { id: PERSISTED.id },
+    });
+  });
+
+  it("falla cerrado con 401 si falta req.user", async () => {
+    // Arrange
+    const { service, remove } = createMockService();
+    const { app, nextErrors } = createHarness({ service, valid: VALID });
+
+    // Act
+    const res = await request(app).delete(`/recipes/${PERSISTED.id}`);
+
+    // Assert
+    expect(res.status).toBe(401);
+    expect(nextErrors[0]).toBeInstanceOf(UnauthorizedError);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("falla cerrado con 400 si falta req.valid.params", async () => {
+    // Arrange
+    const { service, remove } = createMockService();
+    const { app, nextErrors } = createHarness({ service, user: ACTOR });
+
+    // Act
+    const res = await request(app).delete(`/recipes/${PERSISTED.id}`);
+
+    // Assert
+    expect(res.status).toBe(400);
+    expect(nextErrors[0]).toBeInstanceOf(BadRequestError);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    new NotFoundError("Receta no encontrada"),
+    new ForbiddenError("Solo el autor o un administrador pueden eliminar la receta"),
+    new UnauthorizedError("Usuario autenticado no válido"),
+    new Error("inesperado"),
+  ])("delega en next(err) los errores del servicio: %s", async (failure) => {
+    // Arrange
+    const { service, remove } = createMockService();
+    remove.mockRejectedValueOnce(failure);
+    const { app, nextErrors } = createHarness({ service, user: ACTOR, valid: VALID });
+
+    // Act
+    await request(app).delete(`/recipes/${PERSISTED.id}`);
 
     // Assert
     expect(nextErrors).toEqual([failure]);

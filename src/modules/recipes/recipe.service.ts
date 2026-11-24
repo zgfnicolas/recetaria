@@ -6,7 +6,7 @@ import {
   NotFoundError,
   type ErrorDetail,
 } from "../../shared/errors/app-error.js";
-import { canApprove, canEdit } from "./recipe.policy.js";
+import { canApprove, canDelete, canEdit } from "./recipe.policy.js";
 import {
   MAX_PREP_TIME_MINUTES,
   MIN_PREP_TIME_MINUTES,
@@ -30,6 +30,11 @@ export const RECIPE_APPROVAL_FORBIDDEN_MESSAGE =
   "Solo un revisor profesional distinto del autor puede aprobar la receta";
 export const RECIPE_ALREADY_APPROVED_MESSAGE = "La receta ya está aprobada";
 export const RECIPE_EDIT_FORBIDDEN_MESSAGE = "Solo el autor puede editar la receta";
+export const RECIPE_DELETE_FORBIDDEN_MESSAGE =
+  "Solo el autor o un administrador pueden eliminar la receta";
+
+/** Confirmación de un borrado físico (`HU-06`). */
+export type DeletedRecipe = Readonly<{ id: string }>;
 
 export type SlugGenerator = (title: string) => string;
 
@@ -44,6 +49,7 @@ export interface IRecipeService {
   getById(id: string): Promise<RecipeRecord>;
   approve(actor: Actor, recipeId: string): Promise<RecipeRecord>;
   update(actor: Actor, recipeId: string, dto: UpdateRecipeDTO): Promise<RecipeRecord>;
+  delete(actor: Actor, recipeId: string): Promise<DeletedRecipe>;
 }
 
 /**
@@ -234,6 +240,29 @@ export class RecipeService implements IRecipeService {
       throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
     }
     return result.recipe;
+  }
+
+  /**
+   * Eliminación física (`HU-06`): `404` si no existe, `403` si el actor no es el Autor ni `ADMIN`
+   * (`RN-03`). El snapshot y el borrado son atómicos en el repositorio (`RN-06`); `404` también si
+   * un borrado concurrente ganó la carrera. `canDelete` puede evaluarse fuera de la transacción
+   * porque `authorId` es inmutable (ninguna ruta lo acepta); si alguna vez se permite reasignar la
+   * autoría, la verificación debe repetirse sobre la fila bloqueada.
+   */
+  async delete(actor: Actor, recipeId: string): Promise<DeletedRecipe> {
+    const recipe = await this.#recipeRepository.findById(recipeId);
+    if (recipe === null) {
+      throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+    }
+    if (!canDelete(actor, recipe)) {
+      throw new ForbiddenError(RECIPE_DELETE_FORBIDDEN_MESSAGE);
+    }
+
+    const result = await this.#recipeRepository.deleteWithAudit({ recipeId, actorId: actor.id });
+    if (result.outcome === "not_found") {
+      throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+    }
+    return { id: recipeId };
   }
 
   /** Copia solo los campos presentes (sin `undefined`) y agrega el `slug` si cambia `title`. */
