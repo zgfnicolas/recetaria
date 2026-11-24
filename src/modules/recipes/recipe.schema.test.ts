@@ -7,6 +7,8 @@ import {
   listMyRecipesQuerySchema,
   listRecipesQuerySchema,
   recipeIdParamsSchema,
+  UPDATE_REQUIRES_FIELD_MESSAGE,
+  updateRecipeSchema,
   MAX_INGREDIENTS,
   MAX_LIMIT,
   MAX_NUMERIC_AMOUNT,
@@ -424,5 +426,95 @@ describe("recipeIdParamsSchema — :id UUID v4 (HU-04)", () => {
     const result = recipeIdParamsSchema.safeParse({ id: "6f1c2d3e-4b5a-4c6d-8e7f-0123456789ab", x: "1" });
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: ["x"] });
+  });
+});
+
+describe("updateRecipeSchema — edición parcial o completa (HU-05)", () => {
+  it.each([
+    [{ title: "Nuevo título" }],
+    [{ tags: ["vegano"] }],
+    [{ prepTimeMinutes: 20 }],
+  ])("no inyecta defaults: parsear %j devuelve solo las claves enviadas", (input) => {
+    // Regresión: `createRecipeSchema.partial()` agregaría difficulty: "MEDIUM" y tags: []
+    expect(updateRecipeSchema.parse(input)).toEqual(input);
+  });
+
+  it("acepta una edición completa con los mismos validadores del alta", () => {
+    // Arrange
+    const full = {
+      title: "  Ñoquis de papá  ",
+      description: "Ñoquis de papa tradicionales del 29.",
+      difficulty: "HARD",
+      prepTimeMinutes: 60,
+      tags: ["casero"],
+      ingredients: [{ name: "Papa", quantity: 1, unit: "kg" }],
+      nutritionalInfo: { calories: 300 },
+      coverImageUrl: "https://cdn.recetaria.com/a.jpg",
+      videoUrl: "https://cdn.recetaria.com/a.mp4",
+    };
+
+    // Act
+    const result = updateRecipeSchema.parse(full);
+
+    // Assert
+    expect(result).toEqual({ ...full, title: "Ñoquis de papá" });
+  });
+
+  it("rechaza {} con el mensaje de campo requerido", () => {
+    // Act
+    const result = updateRecipeSchema.safeParse({});
+
+    // Assert
+    expect(result.success).toBe(false);
+    expect(result.error?.issues).toEqual([
+      expect.objectContaining({ path: [], message: UPDATE_REQUIRES_FIELD_MESSAGE }),
+    ]);
+  });
+
+  it.each(["status", "authorId", "reviewedById", "publishedAt", "slug", "id", "createdAt"])(
+    "rechaza el campo protegido %s (BOPLA)",
+    (field) => {
+      const result = updateRecipeSchema.safeParse({ title: "Título válido", [field]: "x" });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]).toMatchObject({ code: "unrecognized_keys", keys: [field] });
+    },
+  );
+
+  it.each(["nutritionalInfo", "coverImageUrl", "videoUrl"])("acepta null en el opcional %s para vaciarlo", (field) => {
+    expect(updateRecipeSchema.parse({ [field]: null })).toEqual({ [field]: null });
+  });
+
+  it.each(["title", "description", "difficulty", "prepTimeMinutes", "tags", "ingredients"])(
+    "rechaza null en el campo obligatorio %s",
+    (field) => {
+      const result = updateRecipeSchema.safeParse({ [field]: null });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues.map((issue) => issue.path.join("."))).toContain(field);
+    },
+  );
+
+  it.each([
+    ["title", "ab"],
+    ["description", "corta"],
+    ["difficulty", "IMPOSSIBLE"],
+    ["prepTimeMinutes", 1.5],
+    ["tags", Array.from({ length: MAX_TAGS + 1 }, (_, i) => `t${String(i)}`)],
+    ["ingredients", []],
+    ["ingredients", [{ name: "Sal", quantity: 1, unit: "g", extra: true }]],
+    ["coverImageUrl", "javascript:alert(1)"],
+    ["nutritionalInfo", { calories: -1 }],
+  ])("hereda las validaciones del alta: rechaza %s = %j", (field, value) => {
+    const result = updateRecipeSchema.safeParse({ [field]: value });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.path.join("."))[0]?.startsWith(field)).toBe(true);
+  });
+
+  it("delega RN-07 al servicio: acepta prepTimeMinutes = 0 y quantity = 0 en el borde", () => {
+    expect(
+      updateRecipeSchema.safeParse({
+        prepTimeMinutes: 0,
+        ingredients: [{ name: "Sal", quantity: 0, unit: "g" }],
+      }).success,
+    ).toBe(true);
   });
 });

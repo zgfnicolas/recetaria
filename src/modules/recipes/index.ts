@@ -1,5 +1,5 @@
 export { RecipeController } from "./recipe.controller.js";
-export { canApprove, RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
+export { canApprove, canEdit, RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
 export {
   AUDIT_ENTITY_RECIPE,
   INVALID_AUTHOR_MESSAGE,
@@ -17,6 +17,9 @@ export {
   type RecipeAuditAction,
   type RecipeListFilters,
   type RecipeRecord,
+  type UpdateRecipeChanges,
+  type UpdateWithOptionalResetInput,
+  type UpdateWithOptionalResetResult,
 } from "./recipe.repository.js";
 export { createRecipeRouter, type RecipeRouterOptions } from "./recipe.router.js";
 export {
@@ -34,6 +37,8 @@ export {
   nutritionalInfoSchema,
   RECIPE_DIFFICULTIES,
   recipeIdParamsSchema,
+  UPDATE_REQUIRES_FIELD_MESSAGE,
+  updateRecipeSchema,
   RECIPE_STATUSES,
   type CreateRecipeDTO,
   type IngredientDTO,
@@ -43,11 +48,13 @@ export {
   type RecipeDifficulty,
   type RecipeIdParamsDTO,
   type RecipeStatus,
+  type UpdateRecipeDTO,
 } from "./recipe.schema.js";
 export {
   BUSINESS_VALIDATION_MESSAGE,
   RECIPE_ALREADY_APPROVED_MESSAGE,
   RECIPE_APPROVAL_FORBIDDEN_MESSAGE,
+  RECIPE_EDIT_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
   RecipeService,
   type IRecipeService,

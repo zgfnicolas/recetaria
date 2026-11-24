@@ -86,6 +86,55 @@ export const nutritionalInfoSchema = z.strictObject({
     .optional(),
 });
 
+const titleField = z
+  .string({ error: "El título es obligatorio" })
+  .trim()
+  .min(TITLE_MIN_LENGTH, {
+    error: `El título debe tener al menos ${String(TITLE_MIN_LENGTH)} caracteres`,
+  })
+  .max(TITLE_MAX_LENGTH, {
+    error: `El título no puede superar los ${String(TITLE_MAX_LENGTH)} caracteres`,
+  });
+
+const descriptionField = z
+  .string({ error: "La descripción es obligatoria" })
+  .trim()
+  .min(DESCRIPTION_MIN_LENGTH, {
+    error: `La descripción debe tener al menos ${String(DESCRIPTION_MIN_LENGTH)} caracteres`,
+  })
+  .max(DESCRIPTION_MAX_LENGTH, {
+    error: `La descripción no puede superar los ${String(DESCRIPTION_MAX_LENGTH)} caracteres`,
+  });
+
+const difficultyField = z.enum(RECIPE_DIFFICULTIES, { error: "Dificultad inválida" });
+
+const prepTimeMinutesField = z
+  .number({ error: "El tiempo de preparación es obligatorio y debe ser un número" })
+  .int({ error: "El tiempo de preparación debe ser un número entero de minutos" });
+
+const tagsField = z
+  .array(
+    z
+      .string({ error: "Cada etiqueta debe ser un texto" })
+      .trim()
+      .min(1, { error: "Las etiquetas no pueden estar vacías" })
+      .max(TAG_MAX_LENGTH, {
+        error: `Cada etiqueta no puede superar los ${String(TAG_MAX_LENGTH)} caracteres`,
+      }),
+    { error: "Las etiquetas deben ser una lista de textos" },
+  )
+  .max(MAX_TAGS, { error: `No se permiten más de ${String(MAX_TAGS)} etiquetas` });
+
+const ingredientsField = z
+  .array(ingredientItemSchema, { error: "Los ingredientes deben ser una lista" })
+  .min(1, { error: "La receta debe incluir al menos un ingrediente" })
+  .max(MAX_INGREDIENTS, {
+    error: `La receta no puede incluir más de ${String(MAX_INGREDIENTS)} ingredientes`,
+  });
+
+const coverImageUrlField = mediaUrlSchema("La URL de portada");
+const videoUrlField = mediaUrlSchema("La URL de video");
+
 /**
  * Esquema estricto de entrada para `POST /api/v1/recipes`.
  * Rechaza campos protegidos o desconocidos (`status`, `authorId`, `slug`, `reviewedById`,
@@ -93,55 +142,44 @@ export const nutritionalInfoSchema = z.strictObject({
  * `[1, 1440]` es regla de dominio (`RN-07`) y lo valida `RecipeService`.
  */
 export const createRecipeSchema = z.strictObject({
-  title: z
-    .string({ error: "El título es obligatorio" })
-    .trim()
-    .min(TITLE_MIN_LENGTH, {
-      error: `El título debe tener al menos ${String(TITLE_MIN_LENGTH)} caracteres`,
-    })
-    .max(TITLE_MAX_LENGTH, {
-      error: `El título no puede superar los ${String(TITLE_MAX_LENGTH)} caracteres`,
-    }),
-  description: z
-    .string({ error: "La descripción es obligatoria" })
-    .trim()
-    .min(DESCRIPTION_MIN_LENGTH, {
-      error: `La descripción debe tener al menos ${String(DESCRIPTION_MIN_LENGTH)} caracteres`,
-    })
-    .max(DESCRIPTION_MAX_LENGTH, {
-      error: `La descripción no puede superar los ${String(DESCRIPTION_MAX_LENGTH)} caracteres`,
-    }),
-  difficulty: z.enum(RECIPE_DIFFICULTIES, { error: "Dificultad inválida" }).default("MEDIUM"),
-  prepTimeMinutes: z
-    .number({ error: "El tiempo de preparación es obligatorio y debe ser un número" })
-    .int({ error: "El tiempo de preparación debe ser un número entero de minutos" }),
-  tags: z
-    .array(
-      z
-        .string({ error: "Cada etiqueta debe ser un texto" })
-        .trim()
-        .min(1, { error: "Las etiquetas no pueden estar vacías" })
-        .max(TAG_MAX_LENGTH, {
-          error: `Cada etiqueta no puede superar los ${String(TAG_MAX_LENGTH)} caracteres`,
-        }),
-      { error: "Las etiquetas deben ser una lista de textos" },
-    )
-    .max(MAX_TAGS, { error: `No se permiten más de ${String(MAX_TAGS)} etiquetas` })
-    .default([]),
-  ingredients: z
-    .array(ingredientItemSchema, { error: "Los ingredientes deben ser una lista" })
-    .min(1, { error: "La receta debe incluir al menos un ingrediente" })
-    .max(MAX_INGREDIENTS, {
-      error: `La receta no puede incluir más de ${String(MAX_INGREDIENTS)} ingredientes`,
-    }),
+  title: titleField,
+  description: descriptionField,
+  difficulty: difficultyField.default("MEDIUM"),
+  prepTimeMinutes: prepTimeMinutesField,
+  tags: tagsField.default([]),
+  ingredients: ingredientsField,
   nutritionalInfo: nutritionalInfoSchema.optional(),
-  coverImageUrl: mediaUrlSchema("La URL de portada").optional(),
-  videoUrl: mediaUrlSchema("La URL de video").optional(),
+  coverImageUrl: coverImageUrlField.optional(),
+  videoUrl: videoUrlField.optional(),
 });
+
+export const UPDATE_REQUIRES_FIELD_MESSAGE = "Debe enviar al menos un campo para actualizar";
+
+/**
+ * Esquema estricto de `PUT /api/v1/recipes/:id` (`HU-05`): mismos validadores que el alta pero
+ * **sin `.default()`**. `createRecipeSchema.partial()` conservaría los defaults de Zod 4 e
+ * inyectaría `difficulty`/`tags` pisando datos guardados (y haría pasar un `{}`).
+ * Exige al menos un campo; `null` vacía solo los opcionales (`nutritionalInfo`, `coverImageUrl`,
+ * `videoUrl`). Campos protegidos o desconocidos → `400` (BOPLA). `RN-07` lo revalida el servicio.
+ */
+export const updateRecipeSchema = z
+  .strictObject({
+    title: titleField.optional(),
+    description: descriptionField.optional(),
+    difficulty: difficultyField.optional(),
+    prepTimeMinutes: prepTimeMinutesField.optional(),
+    tags: tagsField.optional(),
+    ingredients: ingredientsField.optional(),
+    nutritionalInfo: nutritionalInfoSchema.nullable().optional(),
+    coverImageUrl: coverImageUrlField.nullable().optional(),
+    videoUrl: videoUrlField.nullable().optional(),
+  })
+  .refine((dto) => Object.keys(dto).length > 0, { error: UPDATE_REQUIRES_FIELD_MESSAGE });
 
 export type IngredientDTO = z.infer<typeof ingredientItemSchema>;
 export type NutritionalInfoDTO = z.infer<typeof nutritionalInfoSchema>;
 export type CreateRecipeDTO = z.infer<typeof createRecipeSchema>;
+export type UpdateRecipeDTO = z.infer<typeof updateRecipeSchema>;
 
 /** Paginación acotada del catálogo (`ADR-0006`, OWASP API4). */
 export const DEFAULT_PAGE = 1;

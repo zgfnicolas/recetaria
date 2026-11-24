@@ -6,22 +6,30 @@ import {
   NotFoundError,
   type ErrorDetail,
 } from "../../shared/errors/app-error.js";
-import { canApprove } from "./recipe.policy.js";
+import { canApprove, canEdit } from "./recipe.policy.js";
 import {
   MAX_PREP_TIME_MINUTES,
   MIN_PREP_TIME_MINUTES,
   type CreateRecipeDTO,
+  type IngredientDTO,
   type ListMyRecipesQueryDTO,
   type ListRecipesQueryDTO,
+  type UpdateRecipeDTO,
 } from "./recipe.schema.js";
 import { generateRecipeSlug } from "./recipe.slug.js";
-import type { IRecipeRepository, PaginatedRecipes, RecipeRecord } from "./recipe.repository.js";
+import type {
+  IRecipeRepository,
+  PaginatedRecipes,
+  RecipeRecord,
+  UpdateRecipeChanges,
+} from "./recipe.repository.js";
 
 export const BUSINESS_VALIDATION_MESSAGE = "Error de validación de negocio";
 export const RECIPE_NOT_FOUND_MESSAGE = "Receta no encontrada";
 export const RECIPE_APPROVAL_FORBIDDEN_MESSAGE =
   "Solo un revisor profesional distinto del autor puede aprobar la receta";
 export const RECIPE_ALREADY_APPROVED_MESSAGE = "La receta ya está aprobada";
+export const RECIPE_EDIT_FORBIDDEN_MESSAGE = "Solo el autor puede editar la receta";
 
 export type SlugGenerator = (title: string) => string;
 
@@ -35,26 +43,36 @@ export interface IRecipeService {
   getMine(authorId: string, query: ListMyRecipesQueryDTO): Promise<PaginatedRecipes>;
   getById(id: string): Promise<RecipeRecord>;
   approve(actor: Actor, recipeId: string): Promise<RecipeRecord>;
+  update(actor: Actor, recipeId: string, dto: UpdateRecipeDTO): Promise<RecipeRecord>;
 }
 
 /**
  * Validaciones de dominio `RN-07`: `prepTimeMinutes` entero en `[1, 1440]`
- * y cada ingrediente con `quantity > 0`. Acumula todos los incumplimientos.
+ * y cada ingrediente con `quantity > 0`. Acumula todos los incumplimientos. En una edición
+ * parcial solo valida los campos presentes (`HU-05`).
  */
 function collectRecipeDomainErrors(
-  dto: Pick<CreateRecipeDTO, "prepTimeMinutes" | "ingredients">,
+  dto: Readonly<{
+    prepTimeMinutes?: number | undefined;
+    ingredients?: readonly IngredientDTO[] | undefined;
+  }>,
 ): ErrorDetail[] {
   const errors: ErrorDetail[] = [];
 
   if (
-    !Number.isInteger(dto.prepTimeMinutes) ||
-    dto.prepTimeMinutes < MIN_PREP_TIME_MINUTES ||
-    dto.prepTimeMinutes > MAX_PREP_TIME_MINUTES
+    dto.prepTimeMinutes !== undefined &&
+    (!Number.isInteger(dto.prepTimeMinutes) ||
+      dto.prepTimeMinutes < MIN_PREP_TIME_MINUTES ||
+      dto.prepTimeMinutes > MAX_PREP_TIME_MINUTES)
   ) {
     errors.push({
       field: "prepTimeMinutes",
       message: `El tiempo de preparación debe ser un entero entre ${String(MIN_PREP_TIME_MINUTES)} y ${String(MAX_PREP_TIME_MINUTES)} minutos`,
     });
+  }
+
+  if (dto.ingredients === undefined) {
+    return errors;
   }
 
   if (dto.ingredients.length === 0) {
@@ -185,5 +203,51 @@ export class RecipeService implements IRecipeService {
       case "already_approved":
         throw new ConflictError(RECIPE_ALREADY_APPROVED_MESSAGE);
     }
+  }
+
+  /**
+   * Edición parcial o completa por el Autor (`HU-05`): `404` si no existe, `403` si el actor no es
+   * el Autor (`RN-02`, incluido `ADMIN`), `400` por `RN-07` sobre los campos presentes y `slug`
+   * regenerado solo si llega `title`. El reinicio a `DRAFT` + `RESET_TO_DRAFT` lo decide el
+   * repositorio sobre la fila bloqueada (`RN-06`).
+   */
+  async update(actor: Actor, recipeId: string, dto: UpdateRecipeDTO): Promise<RecipeRecord> {
+    const recipe = await this.#recipeRepository.findById(recipeId);
+    if (recipe === null) {
+      throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+    }
+    if (!canEdit(actor, recipe)) {
+      throw new ForbiddenError(RECIPE_EDIT_FORBIDDEN_MESSAGE);
+    }
+
+    const errors = collectRecipeDomainErrors(dto);
+    if (errors.length > 0) {
+      throw new BadRequestError(BUSINESS_VALIDATION_MESSAGE, { errors });
+    }
+
+    const result = await this.#recipeRepository.updateWithOptionalReset({
+      recipeId,
+      actorId: actor.id,
+      changes: this.#buildChanges(dto),
+    });
+    if (result.outcome === "not_found") {
+      throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+    }
+    return result.recipe;
+  }
+
+  /** Copia solo los campos presentes (sin `undefined`) y agrega el `slug` si cambia `title`. */
+  #buildChanges(dto: UpdateRecipeDTO): UpdateRecipeChanges {
+    return {
+      ...(dto.title === undefined ? {} : { title: dto.title, slug: this.#generateSlug(dto.title) }),
+      ...(dto.description === undefined ? {} : { description: dto.description }),
+      ...(dto.difficulty === undefined ? {} : { difficulty: dto.difficulty }),
+      ...(dto.prepTimeMinutes === undefined ? {} : { prepTimeMinutes: dto.prepTimeMinutes }),
+      ...(dto.tags === undefined ? {} : { tags: dto.tags }),
+      ...(dto.ingredients === undefined ? {} : { ingredients: dto.ingredients }),
+      ...(dto.nutritionalInfo === undefined ? {} : { nutritionalInfo: dto.nutritionalInfo }),
+      ...(dto.coverImageUrl === undefined ? {} : { coverImageUrl: dto.coverImageUrl }),
+      ...(dto.videoUrl === undefined ? {} : { videoUrl: dto.videoUrl }),
+    };
   }
 }

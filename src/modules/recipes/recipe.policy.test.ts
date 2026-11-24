@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { USER_ROLES, type Actor, type UserRole } from "../auth/index.js";
-import { canApprove, RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
+import { canApprove, canEdit, RECIPE_APPROVER_ROLES } from "./recipe.policy.js";
 
 const ACTOR_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_AUTHOR_ID = "22222222-2222-4222-8222-222222222222";
@@ -36,4 +36,14 @@ describe("canApprove — rol profesional (RN-04) y separación de funciones (RN-
       expect(canApprove(actor(role), { authorId: ACTOR_ID })).toBe(expected);
     },
   );
+});
+
+describe("canEdit — propiedad exclusiva del Autor (RN-02)", () => {
+  it.each(USER_ROLES)("%s puede editar su propia receta", (role) => {
+    expect(canEdit(actor(role), { authorId: ACTOR_ID })).toBe(true);
+  });
+
+  it.each(USER_ROLES)("%s no puede editar una receta ajena (sin excepción para ADMIN)", (role) => {
+    expect(canEdit(actor(role), { authorId: OTHER_AUTHOR_ID })).toBe(false);
+  });
 });

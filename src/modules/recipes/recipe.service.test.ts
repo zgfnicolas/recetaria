@@ -17,6 +17,7 @@ import {
   BUSINESS_VALIDATION_MESSAGE,
   RECIPE_ALREADY_APPROVED_MESSAGE,
   RECIPE_APPROVAL_FORBIDDEN_MESSAGE,
+  RECIPE_EDIT_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
   RecipeService,
 } from "./recipe.service.js";
@@ -53,6 +54,9 @@ function createMockRepository(): {
   readonly findManyPaginated: ReturnType<typeof vi.fn<IRecipeRepository["findManyPaginated"]>>;
   readonly findById: ReturnType<typeof vi.fn<IRecipeRepository["findById"]>>;
   readonly approveWithAudit: ReturnType<typeof vi.fn<IRecipeRepository["approveWithAudit"]>>;
+  readonly updateWithOptionalReset: ReturnType<
+    typeof vi.fn<IRecipeRepository["updateWithOptionalReset"]>
+  >;
 } {
   const create = vi
     .fn<IRecipeRepository["create"]>()
@@ -61,12 +65,21 @@ function createMockRepository(): {
   const findManyPaginated = vi.fn<IRecipeRepository["findManyPaginated"]>();
   const findById = vi.fn<IRecipeRepository["findById"]>().mockResolvedValue(null);
   const approveWithAudit = vi.fn<IRecipeRepository["approveWithAudit"]>();
+  const updateWithOptionalReset = vi.fn<IRecipeRepository["updateWithOptionalReset"]>();
   return {
-    repository: { create, findById, findBySlug, findManyPaginated, approveWithAudit },
+    repository: {
+      create,
+      findById,
+      findBySlug,
+      findManyPaginated,
+      approveWithAudit,
+      updateWithOptionalReset,
+    },
     create,
     findManyPaginated,
     findById,
     approveWithAudit,
+    updateWithOptionalReset,
   };
 }
 
@@ -580,6 +593,195 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
 
     // Assert
     expect(err).toBe(failure);
+  });
+});
+
+describe("RecipeService.update — Edición por el Autor (HU-05, RN-02, RN-07)", () => {
+  const AUTHOR: Actor = { id: AUTHOR_ID, role: "USER" };
+  const existing = (): RecipeRecord => toRecord(buildRecordInput());
+  const fixedSlug = () => "slug-regenerado-0a1b2c3d";
+
+  function arrange(): ReturnType<typeof createMockRepository> & { readonly service: RecipeService } {
+    const mocks = createMockRepository();
+    mocks.findById.mockResolvedValue(existing());
+    mocks.updateWithOptionalReset.mockImplementation(({ changes }) =>
+      Promise.resolve({
+        outcome: "updated",
+        recipe: { ...existing(), ...changes },
+        resetToDraft: false,
+      }),
+    );
+    return { ...mocks, service: new RecipeService(mocks.repository, { generateSlug: fixedSlug }) };
+  }
+
+  it("delega solo los campos presentes, sin regenerar slug si no llega title", async () => {
+    // Arrange
+    const { service, updateWithOptionalReset } = arrange();
+
+    // Act
+    await service.update(AUTHOR, RECIPE_ID, { prepTimeMinutes: 25, coverImageUrl: null });
+
+    // Assert
+    expect(updateWithOptionalReset).toHaveBeenCalledWith({
+      recipeId: RECIPE_ID,
+      actorId: AUTHOR_ID,
+      changes: { prepTimeMinutes: 25, coverImageUrl: null },
+    });
+  });
+
+  it("regenera el slug solo cuando llega title", async () => {
+    // Arrange
+    const generateSlug = vi.fn(fixedSlug);
+    const mocks = createMockRepository();
+    mocks.findById.mockResolvedValue(existing());
+    mocks.updateWithOptionalReset.mockResolvedValue({
+      outcome: "updated",
+      recipe: existing(),
+      resetToDraft: false,
+    });
+    const service = new RecipeService(mocks.repository, { generateSlug });
+
+    // Act
+    await service.update(AUTHOR, RECIPE_ID, { title: "Nuevo título" });
+
+    // Assert
+    expect(generateSlug).toHaveBeenCalledWith("Nuevo título");
+    expect(mocks.updateWithOptionalReset).toHaveBeenCalledWith(
+      expect.objectContaining({ changes: { title: "Nuevo título", slug: "slug-regenerado-0a1b2c3d" } }),
+    );
+  });
+
+  it("no decide el reinicio: delega igual aunque su lectura previa diga APPROVED y devuelve lo del repositorio", async () => {
+    // Arrange — la decisión RESET_TO_DRAFT es del repositorio sobre la fila bloqueada
+    const { service, findById, updateWithOptionalReset } = arrange();
+    findById.mockResolvedValueOnce({ ...existing(), status: "APPROVED", reviewedById: "r", publishedAt: new Date() });
+    const reset: RecipeRecord = { ...existing(), status: "DRAFT", reviewedById: null, publishedAt: null };
+    updateWithOptionalReset.mockResolvedValueOnce({ outcome: "updated", recipe: reset, resetToDraft: true });
+
+    // Act
+    const result = await service.update(AUTHOR, RECIPE_ID, { description: "Descripción nueva y larga." });
+
+    // Assert
+    expect(updateWithOptionalReset).toHaveBeenCalledWith({
+      recipeId: RECIPE_ID,
+      actorId: AUTHOR_ID,
+      changes: { description: "Descripción nueva y larga." },
+    });
+    expect(result).toBe(reset);
+  });
+
+  it("lanza NotFoundError 404 si la receta no existe, sin escribir", async () => {
+    // Arrange
+    const { service, findById, updateWithOptionalReset } = arrange();
+    findById.mockResolvedValueOnce(null);
+
+    // Act
+    const err = await captureError(service.update(AUTHOR, RECIPE_ID, { title: "Nuevo título" }));
+
+    // Assert
+    expect(err).toBeInstanceOf(NotFoundError);
+    expect(updateWithOptionalReset).not.toHaveBeenCalled();
+  });
+
+  it("lanza NotFoundError 404 si la transacción ya no encuentra la receta (borrado concurrente)", async () => {
+    // Arrange
+    const { service, updateWithOptionalReset } = arrange();
+    updateWithOptionalReset.mockResolvedValueOnce({ outcome: "not_found" });
+
+    // Act
+    const err = await captureError(service.update(AUTHOR, RECIPE_ID, { title: "Nuevo título" }));
+
+    // Assert
+    expect(err).toBeInstanceOf(NotFoundError);
+    expect(err).toMatchObject({ message: RECIPE_NOT_FOUND_MESSAGE });
+  });
+
+  it.each([
+    ["otro USER", { id: "77777777-7777-4777-8777-777777777777", role: "USER" } satisfies Actor],
+    ["un ADMIN", { id: "77777777-7777-4777-8777-777777777777", role: "ADMIN" } satisfies Actor],
+    ["un CHEF ajeno", { id: "77777777-7777-4777-8777-777777777777", role: "CHEF" } satisfies Actor],
+  ])("lanza ForbiddenError 403 si edita %s (RN-02), sin escribir", async (_label, actor) => {
+    // Arrange
+    const { service, updateWithOptionalReset } = arrange();
+
+    // Act
+    const err = await captureError(service.update(actor, RECIPE_ID, { title: "Nuevo título" }));
+
+    // Assert
+    expect(err).toBeInstanceOf(ForbiddenError);
+    expect(err).toMatchObject({ statusCode: 403, message: RECIPE_EDIT_FORBIDDEN_MESSAGE });
+    expect(updateWithOptionalReset).not.toHaveBeenCalled();
+  });
+
+  it("acumula los incumplimientos RN-07 de los campos presentes en un único 400, sin escribir", async () => {
+    // Arrange
+    const { service, updateWithOptionalReset } = arrange();
+
+    // Act
+    const err = await captureError(
+      service.update(AUTHOR, RECIPE_ID, {
+        prepTimeMinutes: 1441,
+        ingredients: [
+          { name: "Sal", quantity: 0, unit: "g" },
+          { name: "Agua", quantity: -1, unit: "ml" },
+        ],
+      }),
+    );
+
+    // Assert
+    expect(err).toBeInstanceOf(BadRequestError);
+    expect(err).toMatchObject({
+      statusCode: 400,
+      message: BUSINESS_VALIDATION_MESSAGE,
+      errors: [
+        expect.objectContaining({ field: "prepTimeMinutes" }),
+        expect.objectContaining({ field: "ingredients.0.quantity" }),
+        expect.objectContaining({ field: "ingredients.1.quantity" }),
+      ],
+    });
+    expect(updateWithOptionalReset).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ prepTimeMinutes: 0 }, "prepTimeMinutes"],
+    [{ ingredients: [] }, "ingredients"],
+  ])("rechaza %j (RN-07)", async (dto, field) => {
+    // Arrange
+    const { service } = arrange();
+
+    // Act
+    const err = await captureError(service.update(AUTHOR, RECIPE_ID, dto));
+
+    // Assert
+    expect(err).toMatchObject({ statusCode: 400, errors: [expect.objectContaining({ field })] });
+  });
+
+  it("no valida RN-07 sobre campos ausentes (edición solo de título)", async () => {
+    // Arrange
+    const { service, updateWithOptionalReset } = arrange();
+
+    // Act
+    await service.update(AUTHOR, RECIPE_ID, { title: "Nuevo título" });
+
+    // Assert — sin prepTimeMinutes ni ingredients en el payload, nada que validar ni enviar
+    expect(updateWithOptionalReset).toHaveBeenCalledWith({
+      recipeId: RECIPE_ID,
+      actorId: AUTHOR_ID,
+      changes: { title: "Nuevo título", slug: "slug-regenerado-0a1b2c3d" },
+    });
+  });
+
+  it("propaga el ConflictError 409 por colisión de slug", async () => {
+    // Arrange
+    const { service, updateWithOptionalReset } = arrange();
+    const conflict = new ConflictError("Ya existe una receta con ese slug");
+    updateWithOptionalReset.mockRejectedValueOnce(conflict);
+
+    // Act
+    const err = await captureError(service.update(AUTHOR, RECIPE_ID, { title: "Nuevo título" }));
+
+    // Assert
+    expect(err).toBe(conflict);
   });
 });
 

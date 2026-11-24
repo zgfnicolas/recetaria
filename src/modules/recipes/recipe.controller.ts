@@ -8,6 +8,7 @@ import type {
   ListMyRecipesQueryDTO,
   ListRecipesQueryDTO,
   RecipeIdParamsDTO,
+  UpdateRecipeDTO,
 } from "./recipe.schema.js";
 import type { IRecipeService } from "./recipe.service.js";
 
@@ -112,6 +113,22 @@ export class RecipeController {
       sendSuccess(res, {
         statusCode: 200,
         message: "Receta obtenida exitosamente",
+        data: recipe,
+      });
+    } catch (err: unknown) {
+      next(err);
+    }
+  };
+
+  readonly update = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const actor = readActor(req);
+      const { id } = readValidatedParams<RecipeIdParamsDTO>(req);
+      const body = readValidatedBody<UpdateRecipeDTO>(req);
+      const recipe = await this.#recipeService.update(actor, id, body);
+      sendSuccess(res, {
+        statusCode: 200,
+        message: "Receta actualizada exitosamente",
         data: recipe,
       });
     } catch (err: unknown) {
