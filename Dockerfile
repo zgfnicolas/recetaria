@@ -29,9 +29,29 @@ FROM dependencies AS development
 
 ENV NODE_ENV=development
 COPY --chown=node:node . .
+# `.dockerignore` excluye `src/generated`: se genera el cliente de Prisma para que la imagen arranque
+# sola. Con `docker:dev`, el montaje de ./src (solo lectura, hot-reload) usa el cliente del host.
+RUN npx prisma generate \
+ && chown -R node:node src/generated
 USER node
 EXPOSE 3000
 CMD ["npm", "run", "dev"]
+
+# ==============================================================================
+# Stage 3b: Migrator (contenedor one-shot: `prisma migrate deploy` antes de la API, #24)
+# ==============================================================================
+# Lleva el CLI de Prisma y `tsx` (devDependencies) SIN contaminar la imagen de producción: el
+# runtime no necesita privilegios DDL ni el CLI. Copia `src/` solo porque el seed (dev/test) lo importa.
+FROM dependencies AS migrator
+
+ENV CHECKPOINT_DISABLE=1 \
+    PRISMA_HIDE_UPDATE_MESSAGE=1
+COPY prisma ./prisma
+COPY tsconfig.json ./
+COPY src ./src
+RUN npx prisma generate
+USER node
+CMD ["./node_modules/.bin/prisma", "migrate", "deploy"]
 
 # ==============================================================================
 # Stage 4: Build (Compilación de TypeScript ESM y purga de devDependencies)

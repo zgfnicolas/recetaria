@@ -3,7 +3,7 @@ services:
     build:
       context: .
       target: development
-    image: recetaria/api:dev
+    image: recetaria/api:${DEV_IMAGE_TAG:-dev}
     read_only: false
     environment:
       NODE_ENV: development
@@ -14,6 +14,30 @@ services:
     volumes:
       - ./src:/app/src:ro
       - ./tsconfig.json:/app/tsconfig.json:ro
+    # ./src se monta en solo lectura (hot-reload) y reemplaza al de la imagen: el cliente de Prisma
+    # debe existir en el host (`npm run db:generate`, paso del inicio rápido). Falla con un mensaje claro.
+    command:
+      - sh
+      - -c
+      - >-
+        test -f src/generated/prisma/client.ts
+        || { echo "[docker:dev] Falta el cliente de Prisma en ./src/generated: ejecutá 'npm run db:generate' en el host." >&2; exit 1; };
+        exec npm run dev
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
+  # En dev, además de migrar, siembra los 4 usuarios RBAC (idempotente; el seed solo corre en development|test)
+  migrate:
+    environment:
+      NODE_ENV: development
+    command:
+      - sh
+      - -c
+      - ./node_modules/.bin/prisma migrate deploy && ./node_modules/.bin/tsx prisma/seed.ts
 
   postgres:
     environment:

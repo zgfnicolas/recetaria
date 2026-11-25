@@ -10,6 +10,10 @@ Los 3 atributos que más importan en el MVP, en orden de prioridad:
 - **Plazo académico:** entrega del MVP funcional en 2 semanas enfocado en `Auth` y `Recipes`.
 - **Stack definido (`ADR-0006`):** Node.js 24 LTS, ESM nativo (`nodenext`), Express 5, TypeScript 7 estricto (`tsx` en dev), PostgreSQL 15, Prisma 7 GA (`@prisma/adapter-pg`), Zod 4 (`z.strictObject`), Bcrypt y JWT.
 - **Entorno reproducible:** ejecución local e imagen productiva endurecida mediante Docker y Docker Compose v2 (`Dockerfile`, `compose.yaml`, `compose.override.yaml`).
+- **Verificación del despliegue (#24):** `npm run docker:smoke` levanta la imagen de producción y el stack de dev en proyectos Compose **aislados y efímeros**, sin tocar el `.env` ni la base del usuario. Verifica:
+  - `healthy`, usuario `node`, raíz de solo lectura y `NODE_ENV=production`;
+  - las respuestas JSend de `/health`, `/health/ready`, el login semilla, `/recipes` y `/mine`;
+  - que con PostgreSQL detenido el `HEALTHCHECK` siga `healthy` (ADR-0006).
 
 ## 3. Contexto (C4 nivel 1)
 ```mermaid
@@ -33,7 +37,9 @@ flowchart LR
 flowchart TB
   Client[Cliente HTTP / Thunder Client] -->|HTTP/HTTPS JSON :3000| API
   subgraph Docker_Compose [Stack Contenerizado]
-    API[Container: api<br/>Node.js 24 LTS + Express 5 + Prisma 7] -->|Red interna data :5432| PG[(Container: postgres<br/>PostgreSQL 15.12-alpine)]
+    Migrate[Container: migrate<br/>one-shot prisma migrate deploy] -->|Red interna data :5432| PG[(Container: postgres<br/>PostgreSQL 15.12-alpine)]
+    API[Container: api<br/>Node.js 24 LTS + Express 5 + Prisma 7] -->|Red interna data :5432| PG
+    Migrate -.->|service_completed_successfully| API
     Adminer[Container: adminer<br/>Perfil debug :8080] -.->|Solo dev| PG
   end
 ```
@@ -41,6 +47,7 @@ flowchart TB
 | Contenedor | Tecnología | Responsabilidad |
 |---|---|---|
 | **API** | Node.js 24 LTS (ESM) + Express 5 + TypeScript 7 | Logging HTTP, `/health` + `/health/ready`, enrutamiento `/api/v1`, JWT/RBAC, validación Zod 4, reglas de negocio y acceso vía Prisma 7 |
+| **Migrate** *(one-shot, #24)* | Imagen `migrator` (Node 24 + CLI de Prisma) | Aplica `prisma migrate deploy` y termina con `0` antes de que arranque `api` (`depends_on: service_completed_successfully`). El runtime de producción no lleva el CLI ni necesita privilegios DDL. En dev, además siembra los 4 usuarios RBAC |
 | **Base de datos** | PostgreSQL 15.12-alpine | Persistencia relacional ACID (`users`, `recipes`, `audit_logs`), columnas `JSONB`, índices B-Tree y triggers `updatedAt` |
 | **Adminer** *(opcional)* | Adminer 4.8.1 (perfil `debug`) | Visor SQL local en `127.0.0.1:8080` para inspección durante desarrollo |
 
@@ -76,7 +83,7 @@ flowchart TB
 
 ## 7. Riesgos, deuda técnica y paso a Fase Beta / Producción
 - ~~**Código fuente y colección Thunder Client pendientes**~~ — **resuelto**: el código en `src/` y la colección exportada `docs/thunder-client-collection.json` con su entorno (#23), verificada y ejecutada en `npm test`.
-- **Checklist diferido a Fase Beta / Producción (`ADR-0006`):** migración de secretos `.env` a archivos `secrets:`/`*_FILE`, fijado por digest `@sha256:...` en imágenes base, separación de roles PostgreSQL (`recetaria_runtime` vs `recetaria_migrator`), validación KYC de matrículas profesionales (el auto-registro ya no acepta `role`, #48, y los roles se gestionan con el endpoint auditado de #53) y subida directa a S3 (ver [roadmap.md](roadmap.md)).
+- **Checklist diferido a Fase Beta / Producción (`ADR-0006`):** migración de secretos `.env` a archivos `secrets:`/`*_FILE`, fijado por digest `@sha256:...` en imágenes base, separación de roles PostgreSQL (`recetaria_runtime` vs `recetaria_migrator`: hoy el servicio `migrate` de #24 migra con el superusuario `postgres` y la imagen `migrator` lleva devDependencies y `src/` para el seed de dev/test; en Beta, `MIGRATION_DATABASE_URL` debe apuntar al rol DDL dedicado), validación KYC de matrículas profesionales (el auto-registro ya no acepta `role`, #48, y los roles se gestionan con el endpoint auditado de #53) y subida directa a S3 (ver [roadmap.md](roadmap.md)).
 - **Índices en tablas con datos (#36):** la migración `20261123145000_recipes_list_order_indexes` usa `CREATE INDEX` simple (bloquea escrituras en `recipes` mientras se construye; aceptable en el MVP). En Fase Beta / Producción, toda creación de índices sobre tablas con tráfico debe usar `CREATE INDEX CONCURRENTLY` en una migración sin transacción.
 - **Rate limit en memoria y `trust proxy` (#36, #38):** el store de `express-rate-limit` es por proceso (válido para **una réplica**); con varias réplicas se requiere store compartido (p. ej. `rate-limit-redis`). La IP del cliente se resuelve con la variable validada `TRUST_PROXY` (`src/config/env.ts` → `buildApp({ trustProxy })`): `0` por defecto (ignora `X-Forwarded-For`), número exacto de saltos (`1`–`10`) o lista de IPs/CIDR/presets de los proxies reales (preferentemente la IP exacta del proxy); se rechazan al arrancar `true`, `false` y rangos más amplios que `/8` (IPv4) o `/16` (IPv6), incluidos los IPv4 mapeados (`::ffff:0:0/96`), que permitirían falsificar la IP y evadir el límite. Configurar más saltos que proxies reales también permite falsificarla. **Al desplegar detrás de un proxy inverso es obligatorio configurarla** (si no, todos los clientes comparten la cuota del proxy). Los límites de `/auth` (#39) dependen de la misma configuración.
 - **`GET /api/v1/recipes/mine` sin rate limit (#18, riesgo asumido):** la ruta exige JWT y queda acotada por `limit` ≤ `100`, la ventana `page × limit` ≤ `10000` y el índice `idx_recipes_authorid_createdat_id`, pero un usuario autenticado puede repetir `count` + `findMany` sin cuota. Mitigación prevista: limitador por `req.user.id` colocado después de `authGuard`.

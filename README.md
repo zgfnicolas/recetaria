@@ -45,6 +45,7 @@ DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/recetaria?schema=pub
 JWT_SECRET="reemplazar_por_secreto_criptografico_local_de_al_menos_64_caracteres"
 JWT_EXPIRES_IN="1d"
 TRUST_PROXY=0
+PRISMA_HIDE_UPDATE_MESSAGE=1
 ```
 
 `JWT_EXPIRES_IN` define la vigencia del token (por defecto `1d`). Como no hay refresh tokens, **el máximo es `1d` (86 400 s)**: un valor mayor (`2d`, `1w`, `1y`, …) hace que la API no arranque y muestre `JWT_EXPIRES_IN no puede superar 1d (86400 s)` (#52). Se aceptan `15m`, `1h`, `12h`, `24h`, `1440m`, `86400s` o `1d`.
@@ -124,10 +125,11 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 | `npm run db:generate` | Genera el cliente en `src/generated/prisma/` (ignorado en Git; corre automáticamente antes de `build`, `typecheck`, `typecheck:test` y `test`) |
 | `npm run db:seed` | Ejecuta el seed idempotente (`prisma/seed.ts`) para los 4 roles RBAC (solo `NODE_ENV=development|test`) |
 | `npm run docker:db` | Levanta solo PostgreSQL 15 en segundo plano |
-| `npm run docker:dev` | Levanta API y PostgreSQL en Docker con hot-reload (ejecutar antes `npm run db:generate` en el host) |
+| `npm run docker:dev` | Levanta API y PostgreSQL en Docker con hot-reload. El servicio `migrate` aplica las migraciones y siembra los 4 usuarios. Requiere `npm run db:generate` en el host, porque `./src` se monta en solo lectura; si falta, el contenedor lo avisa |
 | `npm run docker:debug` | Levanta PostgreSQL y Adminer en `http://127.0.0.1:8080` |
-| `npm run docker:prod` | Levanta la imagen endurecida de producción (`compose.yaml`) |
+| `npm run docker:prod` | ⚠️ En un servidor, usá siempre `docker:prod` (o `docker compose -f compose.yaml …`): un `docker compose up` sin `-f` carga también `compose.override.yaml`, que es el modo **dev**, con un `JWT_SECRET` de respaldo y seed con contraseñas públicas. Levanta la imagen endurecida de producción (`compose.yaml`): Node 24 Bookworm slim, usuario `node`, `read_only`, `NODE_ENV=production` fijo y `HEALTHCHECK` sobre `/health`. El servicio `migrate` aplica las migraciones antes de la API, sin seed. No publica puertos: va detrás de un proxy inverso |
 | `npm run docker:down` | Detiene y remueve los contenedores preservando los datos |
+| `npm run docker:smoke` | Pruebas de humo del despliegue (#24): levanta prod y dev en proyectos aislados y efímeros (no usa tu `.env` ni tu base) y verifica salud, endurecimiento, respuestas JSend y ADR-0006. Opciones: `-- --only=prod\|dev`, `-- --keep`. Puertos: `SMOKE_PORT` (3100), `SMOKE_DEV_PORT` (3101) y `SMOKE_DEV_DB_PORT` (55432) |
 
 ## Documentación
 - [Requisitos del producto (PRD)](docs/prd.md)
