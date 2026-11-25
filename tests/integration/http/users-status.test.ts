@@ -16,6 +16,7 @@ import {
   USER_NOT_FOUND_MESSAGE,
 } from "../../../src/modules/users/index.js";
 import { createUserWithRole, loginAs } from "../../support/users.js";
+import { truncateAll } from "../../support/database.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
   secret: "test-jwt-secret-".repeat(3),
@@ -31,7 +32,7 @@ function bearerFor(user: Readonly<{ id: string; role: UserRole }>): string {
 }
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 async function seedUser(db: Database, email: string, role: UserRole, isActive = true): Promise<SeededUser> {

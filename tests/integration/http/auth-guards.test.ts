@@ -23,6 +23,7 @@ import {
 import { INVALID_TOKEN_MESSAGE, type JwtConfig } from "../../../src/modules/auth/index.js";
 import { sendSuccess } from "../../../src/shared/http/jsend.js";
 import { createDbActorResolver, registerAndLogin } from "../../support/users.js";
+import { truncateAll } from "../../support/database.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const UUID_V4_PATTERN =
@@ -45,7 +46,7 @@ function toBase64Url(value: unknown): string {
 }
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 function createGuardsTestApp(options: {

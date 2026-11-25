@@ -1,0 +1,69 @@
+{
+  "clientName": "Thunder Client",
+  "environmentName": "Recetaria — Local",
+  "environmentId": "b374c421-8027-5cef-a4ee-a8007a2b0b82",
+  "dateExported": "2026-11-25T00:00:00.000Z",
+  "version": "1.2",
+  "variables": [
+    {
+      "name": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "name": "userToken",
+      "value": ""
+    },
+    {
+      "name": "userId",
+      "value": ""
+    },
+    {
+      "name": "chefToken",
+      "value": ""
+    },
+    {
+      "name": "chefId",
+      "value": ""
+    },
+    {
+      "name": "nutriToken",
+      "value": ""
+    },
+    {
+      "name": "nutriId",
+      "value": ""
+    },
+    {
+      "name": "adminToken",
+      "value": ""
+    },
+    {
+      "name": "adminId",
+      "value": ""
+    },
+    {
+      "name": "newUserId",
+      "value": ""
+    },
+    {
+      "name": "newUserEmail",
+      "value": ""
+    },
+    {
+      "name": "recipeId",
+      "value": ""
+    },
+    {
+      "name": "recipeEtag",
+      "value": ""
+    },
+    {
+      "name": "chefRecipeId",
+      "value": ""
+    },
+    {
+      "name": "chefRecipeEtag",
+      "value": ""
+    }
+  ]
+}

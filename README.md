@@ -84,8 +84,29 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 - **Middleware de logging:** `loggerMiddleware` imprime en consola método, URL, código HTTP y duración de cada petición sin exponer headers sensibles.
 
 ## Pruebas (Vitest + Supertest + Thunder Client)
+- **Base de pruebas aislada:** `npm test` crea y migra sola una base `<base>_test` (por ejemplo `recetaria_test`) y **nunca** modifica la base de desarrollo de `DATABASE_URL`, así que los datos y los usuarios semilla de `npm run dev` sobreviven a las pruebas. Ver [`docs/testing.md`](docs/testing.md).
 - **Automatizadas:** `npm test` ejecuta pruebas unitarias (`*.service.test.ts`, mockeando solo `Repository`) e integración con Supertest contra PostgreSQL Docker. Incluye, además, las suites End-to-End de `tests/e2e/` (ciclo de vida completo, rutas privadas por defecto y matriz OWASP) y la prueba de fronteras de capas de `tests/architecture/` (#22); detalle en [`docs/testing.md`](docs/testing.md).
-- **Thunder Client:** importar la colección exportada en `docs/thunder-client-collection.json` (cubre todos los endpoints y casos de error `400`, `401`, `403`, `404` y `409`).
+- **Thunder Client** (#23): colección `docs/thunder-client-collection.json` (62 pedidos en 7 carpetas) y entorno `docs/thunder-client-environment.json`, con formato calibrado contra Thunder Client 3.2.7.
+  1. Levantar la API con datos semilla: `npm run docker:db`, `npm run db:seed` y `npm run dev`.
+  2. En Thunder Client, importar el **entorno** (pestaña *Env* → *Import*) y activarlo, y después la **colección** (pestaña *Collections* → *Import*).
+  3. Ejecutar **Run All** sobre la colección. El orden importa:
+     - los login guardan `userToken`, `chefToken`, `nutriToken` y `adminToken`;
+     - el detalle guarda el `ETag` (`recipeEtag`) que exige la aprobación (#46).
+  4. Cada pedido lleva en el nombre el código esperado (`[200]`, `[403]`, `[409]`, …) y un test que lo verifica. Las aserciones son de código HTTP: el contenido de las respuestas (estados, auditoría, filtros) lo verifican las suites E2E de `tests/e2e/` (#22).
+
+  **Qué cubre:** los 13 endpoints y los códigos `200`, `201`, `400`, `401`, `403` (`RN-02`…`RN-05`, `RN-09`, `RN-10`), `404`, `409`, `412` y `428`.
+
+  **Se puede volver a ejecutar:** solo modifica datos que crea en cada corrida (un usuario con email aleatorio y sus recetas). Los usuarios semilla no cambian.
+
+  **Rate limits** (store en memoria por proceso):
+  - **Registro:** cada corrida hace 3 registros y el límite es de 5 por hora por IP. En una segunda corrida dentro de la hora, el tercer registro **recibe** `429`.
+  - **Login:** cada corrida suma 3 intentos fallidos por IP y el límite es de 10 cada 15 minutos. A partir de la cuarta corrida en esa ventana, todos los login responden `429`, también los válidos, y los pedidos siguientes fallan por falta de token.
+
+  Para repetir corridas, reiniciá `npm run dev`, que limpia los contadores. Esto vale solo en local: nunca desactivar ni reiniciar el limitador en entornos compartidos.
+
+  **Solo para entornos locales y desechables:** cada corrida deja un `USER` activo de prueba (`evaluador-*@recetaria.com`) con una contraseña de prueba pública. No la ejecutes contra una base con datos reales.
+
+  `npm test` valida la colección (`tests/docs/thunder-client-collection.test.ts`): formato, cobertura exacta del catálogo de rutas, higiene y su **ejecución completa** contra la app real.
 - **Usuarios semilla (contraseña `password123`):** `user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com` y `admin@recetaria.com`.
 
 ## Scripts disponibles

@@ -9,7 +9,7 @@ Adoptamos el modelo **Testing Trophy** priorizando pruebas de integración HTTP 
 | **Integración** | 50 % | Supertest + PostgreSQL Docker | Endpoints reales, middlewares, transacciones `$transaction` y errores Prisma |
 | **End-to-End (regresión y abuso)** | — | Supertest + PostgreSQL Docker sobre `buildApp({ prisma })` | Ciclo de vida completo, rutas privadas por defecto y matriz OWASP en `tests/e2e/` (#22) |
 | **Arquitectura** | — | Vitest (análisis estático de imports) | Fronteras de las 4 capas (ADR-0003) en `tests/architecture/` |
-| **Aceptación / API** | 30 % | Thunder Client | Colección exportada cubriendo casos felices y errores HTTP obligatorios |
+| **Aceptación / API** | 30 % | Thunder Client | `docs/thunder-client-collection.json` + `docs/thunder-client-environment.json` (#23): 13 endpoints y los códigos obligatorios, ejecutable con *Run All*. `tests/docs/thunder-client-collection.test.ts` valida su formato, su cobertura exacta del catálogo (`tests/support/route-catalog.ts`) y su higiene, y la **ejecuta** en orden contra la app real con el seed |
 
 ## 2. Convenciones de pruebas
 - **Ubicación:**
@@ -20,7 +20,14 @@ Adoptamos el modelo **Testing Trophy** priorizando pruebas de integración HTTP 
   - helpers compartidos en `tests/support/`.
 - **Patrón AAA:** cada test se organiza en *Arrange* (preparar), *Act* (ejecutar) y *Assert* (verificar código HTTP, sobre JSend y estado persistido).
 - **Regla de mocking:** en tests unitarios de `Service` solo se mockea la capa inmediata inferior (`Repository`). Nunca se mockea lógica interna del servicio bajo prueba.
-- **Aislamiento de datos:** las pruebas de integración corren contra una instancia PostgreSQL efímera en Docker con limpieza (`afterEach` / `afterAll`) para evitar contaminación entre suites.
+- **Aislamiento de datos (base de pruebas dedicada):** `npm test` **nunca** usa la base de `DATABASE_URL`, la de desarrollo.
+  - `tests/setup/global-database.ts` (`globalSetup`) deriva la base hermana `<base>_test` (`recetaria` → `recetaria_test`), la crea si falta en el mismo servidor y le aplica `prisma migrate deploy`. Fija `DATABASE_URL` **y** `MIGRATION_DATABASE_URL`, porque `prisma.config.ts` prioriza la segunda.
+  - `tests/setup/env.ts` redirige cada worker a esa base y valida la URL **efectiva**: si no termina en `_test`, la suite aborta antes de conectarse.
+  - El único borrado es `truncateAll` (`tests/support/database.ts`). Antes de `TRUNCATE` consulta `current_database()` y se niega si la base no es `_test`.
+  - `tests/architecture/test-database-isolation.test.ts` impide que aparezca un `TRUNCATE`, `DELETE FROM` o `DROP TABLE` fuera de él.
+  - Se puede usar otra base con `TEST_DATABASE_URL`, que también debe terminar en `_test`. Si la base de `DATABASE_URL` ya se llama `*_test`, las pruebas la usan tal cual (por diseño: ya es una base de pruebas).
+  - Si la base de pruebas ya existe, la preparación solo se conecta a ella. Recurre a la base de mantenimiento `postgres` únicamente para crearla, y conserva parámetros como `sslmode`.
+  - Si la base de pruebas quedara inconsistente, por ejemplo al editar una migración ya aplicada: `DROP DATABASE recetaria_test`, y se recrea sola en la siguiente corrida.
 
 ## 3. Matriz de cobertura HTTP requerida
 Todo módulo (`Auth`, `Recipes`) debe contar con pruebas verificando:

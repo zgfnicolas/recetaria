@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
+    globalSetup: ["./tests/setup/global-database.ts"],
     setupFiles: ["./tests/setup/env.ts"],
     pool: "forks",
     fileParallelism: false,

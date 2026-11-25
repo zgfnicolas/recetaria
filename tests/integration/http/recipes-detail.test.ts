@@ -11,6 +11,7 @@ import {
 import { RATE_LIMIT_EXCEEDED_MESSAGE } from "../../../src/middlewares/rate-limit.middleware.js";
 import { DUMMY_BCRYPT_HASH, type JwtConfig } from "../../../src/modules/auth/index.js";
 import { RECIPE_NOT_FOUND_MESSAGE } from "../../../src/modules/recipes/index.js";
+import { truncateAll } from "../../support/database.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
   secret: "test-jwt-secret-".repeat(3),
@@ -26,7 +27,7 @@ const CREATED_AT = new Date("2026-11-20T10:00:00.000Z");
 const PUBLISHED_AT = new Date("2026-11-21T10:00:00.000Z");
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 async function seed(db: Database): Promise<void> {

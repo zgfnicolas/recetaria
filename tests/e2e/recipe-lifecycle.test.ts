@@ -3,7 +3,8 @@ import request from "supertest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../src/app.js";
 import { disconnect, getDatabase, type Database } from "../../src/infrastructure/database/prisma.js";
-import { E2E_JWT_CONFIG, truncateAll } from "../support/e2e.js";
+import { truncateAll } from "../support/database.js";
+import { E2E_JWT_CONFIG } from "../support/e2e.js";
 import { createExposureRecorder } from "../support/exposure.js";
 import { createUserWithRole, TEST_USER_PASSWORD } from "../support/users.js";
 

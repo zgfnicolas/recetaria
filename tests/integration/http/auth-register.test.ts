@@ -10,13 +10,14 @@ import {
 import { DEFAULT_SEED_PASSWORD, SEED_USERS, seedUsers } from "../../../prisma/seed.js";
 import { UserRepository } from "../../../src/modules/auth/index.js";
 import { ConflictError } from "../../../src/shared/errors/app-error.js";
+import { truncateAll } from "../../support/database.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 describe("POST /api/v1/auth/register — Integración HTTP (Supertest + PostgreSQL 15)", () => {

@@ -14,6 +14,7 @@ import {
   type RecipeDifficulty,
   type RecipeStatus,
 } from "../../../src/modules/recipes/index.js";
+import { truncateAll } from "../../support/database.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
   secret: "test-jwt-secret-".repeat(3),
@@ -62,7 +63,7 @@ function bearer(id: string, role = "USER"): string {
 }
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 async function seed(db: Database, recipes: readonly SeededRecipe[]): Promise<void> {

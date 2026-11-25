@@ -15,6 +15,7 @@ import {
   DEFAULT_AUTH_REGISTER_RATE_LIMIT,
   type JwtConfig,
 } from "../../../src/modules/auth/index.js";
+import { truncateAll } from "../../support/database.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
   secret: "test-jwt-secret-".repeat(3),
@@ -33,7 +34,7 @@ const RATE_LIMITED_BODY = {
 };
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 describe("Rate limit de /api/v1/auth contra fuerza bruta (#39, OWASP API2/API4)", () => {

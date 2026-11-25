@@ -11,6 +11,7 @@ import {
   getDatabase,
   type Database,
 } from "../../../src/infrastructure/database/prisma.js";
+import { truncateAll } from "../../support/database.js";
 
 const EXPECTED_SEED_PROFILES = [
   {
@@ -55,7 +56,7 @@ function requireDatabaseUrl(): string {
 }
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 describe("Seed idempotente de usuarios RBAC — PostgreSQL 15", () => {

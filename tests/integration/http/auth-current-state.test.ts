@@ -18,6 +18,7 @@ import {
   RecipeRepository,
   RecipeService,
 } from "../../../src/modules/recipes/index.js";
+import { truncateAll } from "../../support/database.js";
 import { createUserWithRole } from "../../support/users.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
@@ -100,12 +101,12 @@ describe("authMiddleware con el estado vigente del actor (ADR-0009, #56, Integra
   });
 
   beforeEach(async () => {
-    await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+    await truncateAll(db);
   });
 
   afterEach(async () => {
     vi.restoreAllMocks();
-    await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+    await truncateAll(db);
   });
 
   afterAll(async () => {

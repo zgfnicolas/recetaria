@@ -1,0 +1,1736 @@
+{
+  "clientName": "Thunder Client",
+  "collectionName": "Recetaria API — MVP",
+  "collectionId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+  "dateExported": "2026-11-25T00:00:00.000Z",
+  "version": "1.2",
+  "folders": [
+    {
+      "_id": "8d104ffe-f6e8-5f12-9e33-fc4cf93d279e",
+      "name": "Health",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 10000
+    },
+    {
+      "_id": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "Auth",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 20000
+    },
+    {
+      "_id": "82bd7dad-2f45-5099-a18b-2a8001065cb6",
+      "name": "Recipes — Happy Path",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 30000
+    },
+    {
+      "_id": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "Recipes — Filtros y Paginación",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 40000
+    },
+    {
+      "_id": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "Recipes — Errores y RBAC",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 50000
+    },
+    {
+      "_id": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "Users — Administración",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 60000
+    },
+    {
+      "_id": "ee8bf862-cc4a-53f1-9523-39b60c11b498",
+      "name": "Cleanup",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 70000
+    }
+  ],
+  "requests": [
+    {
+      "_id": "ee7756f7-2e41-5141-819a-9a37c0f291be",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "8d104ffe-f6e8-5f12-9e33-fc4cf93d279e",
+      "name": "[200] Liveness GET /health",
+      "url": "{{baseUrl}}/health",
+      "method": "GET",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "78835eab-eb65-504c-806c-b8e260c73347",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "8d104ffe-f6e8-5f12-9e33-fc4cf93d279e",
+      "name": "[200] Readiness GET /health/ready (PostgreSQL)",
+      "url": "{{baseUrl}}/health/ready",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "ffc9c0ca-1666-52a5-8bbc-68bc087af267",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[200] Login USER semilla (user@recetaria.com)",
+      "url": "{{baseUrl}}/api/v1/auth/login",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"user@recetaria.com\",\n  \"password\": \"password123\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.token",
+          "action": "setto",
+          "value": "{{userToken}}"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.user.id",
+          "action": "setto",
+          "value": "{{userId}}"
+        }
+      ]
+    },
+    {
+      "_id": "931ddc42-30eb-50bd-a139-dc5e10105171",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[200] Login CHEF semilla (chef@recetaria.com)",
+      "url": "{{baseUrl}}/api/v1/auth/login",
+      "method": "POST",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"chef@recetaria.com\",\n  \"password\": \"password123\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.token",
+          "action": "setto",
+          "value": "{{chefToken}}"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.user.id",
+          "action": "setto",
+          "value": "{{chefId}}"
+        }
+      ]
+    },
+    {
+      "_id": "4e867862-e6b5-59d2-bc92-86e36363c967",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[200] Login NUTRITIONIST semilla (nutri@recetaria.com)",
+      "url": "{{baseUrl}}/api/v1/auth/login",
+      "method": "POST",
+      "sortNum": 30000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"nutri@recetaria.com\",\n  \"password\": \"password123\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.token",
+          "action": "setto",
+          "value": "{{nutriToken}}"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.user.id",
+          "action": "setto",
+          "value": "{{nutriId}}"
+        }
+      ]
+    },
+    {
+      "_id": "c6466c49-50fb-5d68-96e1-53664f289c02",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[200] Login ADMIN semilla (admin@recetaria.com)",
+      "url": "{{baseUrl}}/api/v1/auth/login",
+      "method": "POST",
+      "sortNum": 40000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"admin@recetaria.com\",\n  \"password\": \"password123\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.token",
+          "action": "setto",
+          "value": "{{adminToken}}"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.user.id",
+          "action": "setto",
+          "value": "{{adminId}}"
+        }
+      ]
+    },
+    {
+      "_id": "181da9f1-ec3a-5702-b9bd-afdbef343de2",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[201] Registro de un USER nuevo (email aleatorio)",
+      "url": "{{baseUrl}}/api/v1/auth/register",
+      "method": "POST",
+      "sortNum": 50000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"{{#email}}\",\n  \"password\": \"Password-segura-1\",\n  \"firstName\": \"Evaluador\",\n  \"lastName\": \"Thunder\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "201"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.id",
+          "action": "setto",
+          "value": "{{newUserId}}"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.email",
+          "action": "setto",
+          "value": "{{newUserEmail}}"
+        }
+      ]
+    },
+    {
+      "_id": "663f4dc0-434b-53a7-b9c2-a44e2ed92150",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[409] Registro con email duplicado (RN-08)",
+      "url": "{{baseUrl}}/api/v1/auth/register",
+      "method": "POST",
+      "sortNum": 60000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"password\": \"Password-segura-1\",\n  \"firstName\": \"Evaluador\",\n  \"lastName\": \"Thunder\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "409"
+        }
+      ]
+    },
+    {
+      "_id": "474eff31-e21f-5561-8159-09d14353252a",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[400] Registro con role ADMIN (BOPLA, RN-08)",
+      "url": "{{baseUrl}}/api/v1/auth/register",
+      "method": "POST",
+      "sortNum": 70000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"intruso@recetaria.com\",\n  \"password\": \"Password-segura-1\",\n  \"firstName\": \"Intruso\",\n  \"lastName\": \"Thunder\",\n  \"role\": \"ADMIN\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "69c02efe-0847-59d5-90d9-5b227004ad01",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[401] Login con contraseña incorrecta (genérico, RN-08)",
+      "url": "{{baseUrl}}/api/v1/auth/login",
+      "method": "POST",
+      "sortNum": 80000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"user@recetaria.com\",\n  \"password\": \"contraseña-incorrecta\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "401"
+        }
+      ]
+    },
+    {
+      "_id": "ea2c587b-1b32-56e4-9a9d-d84333b3286e",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "41ea87e1-1c8b-5b7f-a421-7871e5d03f3c",
+      "name": "[400] Login con email inválido",
+      "url": "{{baseUrl}}/api/v1/auth/login",
+      "method": "POST",
+      "sortNum": 90000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"no-es-un-email\",\n  \"password\": \"password123\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "64788fb9-4273-52b8-99e6-6de386203080",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "82bd7dad-2f45-5099-a18b-2a8001065cb6",
+      "name": "[201] Crear receta como USER → DRAFT (RN-01)",
+      "url": "{{baseUrl}}/api/v1/recipes",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"title\": \"Ensalada de quinoa sin TACC\",\n  \"description\": \"Quinoa cocida con vegetales frescos y aderezo de limón, apta para celíacos.\",\n  \"difficulty\": \"EASY\",\n  \"prepTimeMinutes\": 25,\n  \"tags\": [\n    \"sin-tacc\",\n    \"vegano\"\n  ],\n  \"ingredients\": [\n    {\n      \"name\": \"Quinoa\",\n      \"quantity\": 200,\n      \"unit\": \"g\"\n    },\n    {\n      \"name\": \"Tomate\",\n      \"quantity\": 2,\n      \"unit\": \"u\"\n    }\n  ],\n  \"nutritionalInfo\": {\n    \"calories\": 420,\n    \"proteinGrams\": 14,\n    \"carbsGrams\": 62,\n    \"fatGrams\": 12,\n    \"fiberGrams\": 8,\n    \"servings\": 2\n  }\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "201"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.id",
+          "action": "setto",
+          "value": "{{recipeId}}"
+        }
+      ]
+    },
+    {
+      "_id": "19133449-46c8-5301-99e8-ad36983b510a",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "82bd7dad-2f45-5099-a18b-2a8001065cb6",
+      "name": "[200] Catálogo público sin token",
+      "url": "{{baseUrl}}/api/v1/recipes",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "0c9299c3-cb43-5f17-ac00-83bea6923148",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "82bd7dad-2f45-5099-a18b-2a8001065cb6",
+      "name": "[200] Detalle público (guarda el ETag)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "GET",
+      "sortNum": 30000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "header.etag",
+          "action": "setto",
+          "value": "{{recipeEtag}}"
+        }
+      ]
+    },
+    {
+      "_id": "c1aad533-9c20-534f-903b-b3f2c826429a",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "82bd7dad-2f45-5099-a18b-2a8001065cb6",
+      "name": "[200] Mis recetas como USER",
+      "url": "{{baseUrl}}/api/v1/recipes/mine",
+      "method": "GET",
+      "sortNum": 40000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "f6a865c0-8d0e-5a73-b6df-670e339e9c9b",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "82bd7dad-2f45-5099-a18b-2a8001065cb6",
+      "name": "[200] Aprobar como CHEF con If-Match (RN-04, #46)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}/approve",
+      "method": "PUT",
+      "sortNum": 50000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [
+        {
+          "name": "If-Match",
+          "value": "{{recipeEtag}}"
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "header.etag",
+          "action": "setto",
+          "value": "{{recipeEtag}}"
+        }
+      ]
+    },
+    {
+      "_id": "d894d24f-61b1-5494-bb6e-08d682c22a97",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "82bd7dad-2f45-5099-a18b-2a8001065cb6",
+      "name": "[200] Editar como autor → RESET_TO_DRAFT (RN-02)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "PUT",
+      "sortNum": 60000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"prepTimeMinutes\": 30\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "header.etag",
+          "action": "setto",
+          "value": "{{recipeEtag}}"
+        }
+      ]
+    },
+    {
+      "_id": "02beae5e-b748-58ad-8f30-b5a82c294fb8",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "82bd7dad-2f45-5099-a18b-2a8001065cb6",
+      "name": "[200] Reaprobar como NUTRITIONIST con el ETag nuevo",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}/approve",
+      "method": "PUT",
+      "sortNum": 70000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [
+        {
+          "name": "If-Match",
+          "value": "{{recipeEtag}}"
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{nutriToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "header.etag",
+          "action": "setto",
+          "value": "{{recipeEtag}}"
+        }
+      ]
+    },
+    {
+      "_id": "ebbf8012-ef8f-589b-a524-04908ce20305",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[200] Filtrar por status=APPROVED",
+      "url": "{{baseUrl}}/api/v1/recipes?status=APPROVED",
+      "method": "GET",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "b91d4b3d-b20a-5fee-9af3-1b40b6f7d7e3",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[200] Filtrar por difficulty=EASY",
+      "url": "{{baseUrl}}/api/v1/recipes?difficulty=EASY",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "26e9df11-a524-567c-b3a3-06be502098f0",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[200] Filtrar por authorId",
+      "url": "{{baseUrl}}/api/v1/recipes?authorId={{userId}}",
+      "method": "GET",
+      "sortNum": 30000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "58c13cbd-a7b7-54ef-a6b5-5423f0924598",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[200] Paginación page=1&limit=5",
+      "url": "{{baseUrl}}/api/v1/recipes?page=1&limit=5",
+      "method": "GET",
+      "sortNum": 40000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "2da5788b-d426-57c4-8c4c-f1d72e0b352a",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[200] Filtros combinados",
+      "url": "{{baseUrl}}/api/v1/recipes?status=APPROVED&difficulty=EASY&authorId={{userId}}&page=1&limit=10",
+      "method": "GET",
+      "sortNum": 50000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "8586205b-fae0-5aa4-b5a3-68e2123ab0e0",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[400] limit fuera de rango (máx. 100)",
+      "url": "{{baseUrl}}/api/v1/recipes?limit=101",
+      "method": "GET",
+      "sortNum": 60000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "c3a3a715-1627-5c73-b6c1-330a98ee25cd",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[400] Parámetro desconocido",
+      "url": "{{baseUrl}}/api/v1/recipes?orden=asc",
+      "method": "GET",
+      "sortNum": 70000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "6a526c8d-240f-5963-a584-07c20dbad50e",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[200] Mis recetas filtradas por status",
+      "url": "{{baseUrl}}/api/v1/recipes/mine?status=APPROVED",
+      "method": "GET",
+      "sortNum": 80000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "3a046974-6f79-5662-b46a-6d4b4a2635e2",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "781a6803-c367-5adf-9525-6ca54fe6501c",
+      "name": "[400] Mis recetas con authorId (IDOR por query)",
+      "url": "{{baseUrl}}/api/v1/recipes/mine?authorId={{chefId}}",
+      "method": "GET",
+      "sortNum": 90000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "dcef6b4c-0021-534c-bd1f-6d492efd9dd9",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[401] Crear receta sin token",
+      "url": "{{baseUrl}}/api/v1/recipes",
+      "method": "POST",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"title\": \"Ensalada de quinoa sin TACC\",\n  \"description\": \"Quinoa cocida con vegetales frescos y aderezo de limón, apta para celíacos.\",\n  \"difficulty\": \"EASY\",\n  \"prepTimeMinutes\": 25,\n  \"tags\": [\n    \"sin-tacc\",\n    \"vegano\"\n  ],\n  \"ingredients\": [\n    {\n      \"name\": \"Quinoa\",\n      \"quantity\": 200,\n      \"unit\": \"g\"\n    },\n    {\n      \"name\": \"Tomate\",\n      \"quantity\": 2,\n      \"unit\": \"u\"\n    }\n  ],\n  \"nutritionalInfo\": {\n    \"calories\": 420,\n    \"proteinGrams\": 14,\n    \"carbsGrams\": 62,\n    \"fatGrams\": 12,\n    \"fiberGrams\": 8,\n    \"servings\": 2\n  }\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "401"
+        }
+      ]
+    },
+    {
+      "_id": "e26fa4ce-3ade-53e4-a1ec-20609c55c128",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[401] Mis recetas con token inválido",
+      "url": "{{baseUrl}}/api/v1/recipes/mine",
+      "method": "GET",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "token-invalido"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "401"
+        }
+      ]
+    },
+    {
+      "_id": "bdc747ed-5797-5006-a329-5ed31d3c8ade",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[400] Crear receta con prepTimeMinutes = 0 (RN-07)",
+      "url": "{{baseUrl}}/api/v1/recipes",
+      "method": "POST",
+      "sortNum": 30000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"title\": \"Ensalada de quinoa sin TACC\",\n  \"description\": \"Quinoa cocida con vegetales frescos y aderezo de limón, apta para celíacos.\",\n  \"difficulty\": \"EASY\",\n  \"prepTimeMinutes\": 0,\n  \"tags\": [\n    \"sin-tacc\",\n    \"vegano\"\n  ],\n  \"ingredients\": [\n    {\n      \"name\": \"Quinoa\",\n      \"quantity\": 200,\n      \"unit\": \"g\"\n    },\n    {\n      \"name\": \"Tomate\",\n      \"quantity\": 2,\n      \"unit\": \"u\"\n    }\n  ],\n  \"nutritionalInfo\": {\n    \"calories\": 420,\n    \"proteinGrams\": 14,\n    \"carbsGrams\": 62,\n    \"fatGrams\": 12,\n    \"fiberGrams\": 8,\n    \"servings\": 2\n  }\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "050ebcb0-4e51-57e9-ab8d-382074d220a3",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[400] Crear receta con un ingrediente de quantity 0 (RN-07)",
+      "url": "{{baseUrl}}/api/v1/recipes",
+      "method": "POST",
+      "sortNum": 40000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"title\": \"Ensalada de quinoa sin TACC\",\n  \"description\": \"Quinoa cocida con vegetales frescos y aderezo de limón, apta para celíacos.\",\n  \"difficulty\": \"EASY\",\n  \"prepTimeMinutes\": 25,\n  \"tags\": [\n    \"sin-tacc\",\n    \"vegano\"\n  ],\n  \"ingredients\": [\n    {\n      \"name\": \"Quinoa\",\n      \"quantity\": 0,\n      \"unit\": \"g\"\n    }\n  ],\n  \"nutritionalInfo\": {\n    \"calories\": 420,\n    \"proteinGrams\": 14,\n    \"carbsGrams\": 62,\n    \"fatGrams\": 12,\n    \"fiberGrams\": 8,\n    \"servings\": 2\n  }\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "4991d820-d47e-5656-afec-8c0a23553bb0",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[400] Crear receta con status APPROVED (BOPLA, RN-01)",
+      "url": "{{baseUrl}}/api/v1/recipes",
+      "method": "POST",
+      "sortNum": 50000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"title\": \"Ensalada de quinoa sin TACC\",\n  \"description\": \"Quinoa cocida con vegetales frescos y aderezo de limón, apta para celíacos.\",\n  \"difficulty\": \"EASY\",\n  \"prepTimeMinutes\": 25,\n  \"tags\": [\n    \"sin-tacc\",\n    \"vegano\"\n  ],\n  \"ingredients\": [\n    {\n      \"name\": \"Quinoa\",\n      \"quantity\": 200,\n      \"unit\": \"g\"\n    },\n    {\n      \"name\": \"Tomate\",\n      \"quantity\": 2,\n      \"unit\": \"u\"\n    }\n  ],\n  \"nutritionalInfo\": {\n    \"calories\": 420,\n    \"proteinGrams\": 14,\n    \"carbsGrams\": 62,\n    \"fatGrams\": 12,\n    \"fiberGrams\": 8,\n    \"servings\": 2\n  },\n  \"status\": \"APPROVED\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "fddce495-8bcb-58e1-bae9-c4f90a8e03dc",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[400] Detalle con :id que no es UUID",
+      "url": "{{baseUrl}}/api/v1/recipes/abc",
+      "method": "GET",
+      "sortNum": 60000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "c3919a52-c281-53cf-9034-965952e49522",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[404] Detalle de una receta inexistente",
+      "url": "{{baseUrl}}/api/v1/recipes/99999999-9999-4999-8999-999999999999",
+      "method": "GET",
+      "sortNum": 70000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "_id": "32a9ac1d-9e41-515b-b010-9d539ba08ab3",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[403] Editar receta ajena como CHEF (RN-02)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "PUT",
+      "sortNum": 80000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"prepTimeMinutes\": 99\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "10f4a0e9-556c-58a8-bdd3-5b50539d350e",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[403] Borrar receta ajena como NUTRITIONIST (RN-03)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "DELETE",
+      "sortNum": 90000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{nutriToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "17e164ab-1ebb-5e6b-b333-20d7f8072aeb",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[403] Aprobar como USER (RN-04)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}/approve",
+      "method": "PUT",
+      "sortNum": 100000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [
+        {
+          "name": "If-Match",
+          "value": "{{recipeEtag}}"
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "d0917678-d246-54bc-8d2f-7e166f9fd850",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[403] Aprobar como ADMIN (RN-04)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}/approve",
+      "method": "PUT",
+      "sortNum": 110000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [
+        {
+          "name": "If-Match",
+          "value": "{{recipeEtag}}"
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "befa17ee-ec88-5c03-9bdb-d96ef5b1f7e0",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[201] Crear receta como CHEF (para la auto-aprobación)",
+      "url": "{{baseUrl}}/api/v1/recipes",
+      "method": "POST",
+      "sortNum": 120000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"title\": \"Risotto de hongos del chef\",\n  \"description\": \"Quinoa cocida con vegetales frescos y aderezo de limón, apta para celíacos.\",\n  \"difficulty\": \"EASY\",\n  \"prepTimeMinutes\": 25,\n  \"tags\": [\n    \"sin-tacc\",\n    \"vegano\"\n  ],\n  \"ingredients\": [\n    {\n      \"name\": \"Quinoa\",\n      \"quantity\": 200,\n      \"unit\": \"g\"\n    },\n    {\n      \"name\": \"Tomate\",\n      \"quantity\": 2,\n      \"unit\": \"u\"\n    }\n  ],\n  \"nutritionalInfo\": {\n    \"calories\": 420,\n    \"proteinGrams\": 14,\n    \"carbsGrams\": 62,\n    \"fatGrams\": 12,\n    \"fiberGrams\": 8,\n    \"servings\": 2\n  }\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "201"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "json.data.id",
+          "action": "setto",
+          "value": "{{chefRecipeId}}"
+        }
+      ]
+    },
+    {
+      "_id": "944c1f4a-f265-521f-a12d-30e8095c75dc",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[200] Detalle de la receta del CHEF (guarda su ETag)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{chefRecipeId}}",
+      "method": "GET",
+      "sortNum": 130000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        },
+        {
+          "type": "set-env-var",
+          "custom": "header.etag",
+          "action": "setto",
+          "value": "{{chefRecipeEtag}}"
+        }
+      ]
+    },
+    {
+      "_id": "48c003d2-38bd-50f0-93bb-ce5e158f003c",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[403] Auto-aprobación del CHEF (RN-05)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{chefRecipeId}}/approve",
+      "method": "PUT",
+      "sortNum": 140000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [
+        {
+          "name": "If-Match",
+          "value": "{{chefRecipeEtag}}"
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "38e67c19-602a-5b41-9501-4946ef27dafb",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[428] Aprobar sin If-Match (#46)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}/approve",
+      "method": "PUT",
+      "sortNum": 150000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "428"
+        }
+      ]
+    },
+    {
+      "_id": "49434b2d-9f8d-556f-a1f8-793ab0d51cb0",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[412] Aprobar con un ETag obsoleto (#46)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}/approve",
+      "method": "PUT",
+      "sortNum": 160000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [
+        {
+          "name": "If-Match",
+          "value": "\"1\""
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "412"
+        }
+      ]
+    },
+    {
+      "_id": "9c9ba752-f110-5577-be97-ec96329bf9bd",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[409] Doble aprobación de una receta ya APPROVED (RN-04)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}/approve",
+      "method": "PUT",
+      "sortNum": 170000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [
+        {
+          "name": "If-Match",
+          "value": "{{recipeEtag}}"
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "409"
+        }
+      ]
+    },
+    {
+      "_id": "20bc0f18-7311-5cb2-88b7-d60117be832b",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[400] Editar con body vacío (al menos 1 campo, RN-02)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "PUT",
+      "sortNum": 180000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "2201cd71-94f4-53da-a8de-20f2334bc63c",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[404] Editar una receta inexistente",
+      "url": "{{baseUrl}}/api/v1/recipes/99999999-9999-4999-8999-999999999999",
+      "method": "PUT",
+      "sortNum": 190000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"prepTimeMinutes\": 20\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "_id": "9a64e12d-7766-5921-b7dc-5cc9f8ed46e5",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[404] Aprobar una receta inexistente",
+      "url": "{{baseUrl}}/api/v1/recipes/99999999-9999-4999-8999-999999999999/approve",
+      "method": "PUT",
+      "sortNum": 200000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [
+        {
+          "name": "If-Match",
+          "value": "\"1\""
+        }
+      ],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "_id": "bc119e37-7680-5388-bfdb-4b86eb93d06e",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "7261f0c2-ad28-58e1-90a2-b536a258197e",
+      "name": "[404] Borrar una receta inexistente",
+      "url": "{{baseUrl}}/api/v1/recipes/99999999-9999-4999-8999-999999999999",
+      "method": "DELETE",
+      "sortNum": 210000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "_id": "e737c0bb-c902-55f9-878c-ac5ab297154f",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[200] Promover al usuario nuevo a CHEF como ADMIN (RN-09)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/role",
+      "method": "PATCH",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"CHEF\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "bf306a7c-f44c-575f-9103-098630a3eb61",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[200] Devolver al usuario nuevo a USER (RN-09)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/role",
+      "method": "PATCH",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"USER\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "8b53d0dd-f886-5e3f-ac17-b3cf9e6275d3",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[403] Cambiar un rol como USER (RN-09)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/role",
+      "method": "PATCH",
+      "sortNum": 30000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"ADMIN\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "47c97782-8f13-5c93-8729-6cd00fbf4bd8",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[403] ADMIN cambiando su propio rol (RN-09)",
+      "url": "{{baseUrl}}/api/v1/users/{{adminId}}/role",
+      "method": "PATCH",
+      "sortNum": 40000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"USER\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "a7a98356-c191-59c6-9df1-c3f6a4d4d385",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[404] Cambiar el rol de un usuario inexistente",
+      "url": "{{baseUrl}}/api/v1/users/99999999-9999-4999-8999-999999999999/role",
+      "method": "PATCH",
+      "sortNum": 50000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"CHEF\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "_id": "3e683efd-0f03-58c9-aa98-bbb44c6feb1b",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[401] Cambiar un rol sin token",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/role",
+      "method": "PATCH",
+      "sortNum": 60000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"CHEF\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "401"
+        }
+      ]
+    },
+    {
+      "_id": "a9d4c425-8ed8-584f-be24-3415be82f1c6",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[200] Desactivar al usuario nuevo como ADMIN (RN-10)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/status",
+      "method": "PATCH",
+      "sortNum": 70000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"isActive\": false\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "a89fc039-e9a7-5338-a2f2-13fbf5edb355",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[401] Login de la cuenta desactivada (genérico, RN-08/RN-10)",
+      "url": "{{baseUrl}}/api/v1/auth/login",
+      "method": "POST",
+      "sortNum": 80000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"password\": \"Password-segura-1\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "401"
+        }
+      ]
+    },
+    {
+      "_id": "12408124-1b48-58a7-ba79-0f1e12c0926f",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[200] Reactivar al usuario nuevo como ADMIN (RN-10)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/status",
+      "method": "PATCH",
+      "sortNum": 90000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"isActive\": true\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "b53f436b-8ae8-5a7e-9c27-952d7c267576",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[400] Cambiar estado con un campo extra (BOPLA, RN-10)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/status",
+      "method": "PATCH",
+      "sortNum": 100000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"isActive\": false,\n  \"role\": \"ADMIN\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "ba8d430b-e970-53c5-b169-35481034bf7e",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "4cd309c2-1494-5c43-a95f-e158bd851937",
+      "name": "[403] ADMIN desactivando su propia cuenta (RN-10)",
+      "url": "{{baseUrl}}/api/v1/users/{{adminId}}/status",
+      "method": "PATCH",
+      "sortNum": 110000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"isActive\": false\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "e2e4eb11-6baf-5da6-827b-81c1d0ad0b09",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "ee8bf862-cc4a-53f1-9523-39b60c11b498",
+      "name": "[200] Borrar la receta como ADMIN (RN-03)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "DELETE",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "a91f1392-4e4c-5c0d-8e2a-20eea324e4cc",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "ee8bf862-cc4a-53f1-9523-39b60c11b498",
+      "name": "[404] Borrar la misma receta otra vez",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "DELETE",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "_id": "1f475c5b-2075-5be3-b79d-8efc8c92d1db",
+      "colId": "6487e6f3-1b36-56c6-811d-dda8ca082c78",
+      "containerId": "ee8bf862-cc4a-53f1-9523-39b60c11b498",
+      "name": "[200] Borrar su propia receta como CHEF (autor, RN-03)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{chefRecipeId}}",
+      "method": "DELETE",
+      "sortNum": 30000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    }
+  ]
+}
