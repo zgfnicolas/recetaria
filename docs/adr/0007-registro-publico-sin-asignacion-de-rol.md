@@ -1,7 +1,7 @@
 # 7. Registro público sin asignación de rol
 
 Fecha: 2026-11-24
-Estado: Aceptada (reemplaza parcialmente a ADR-0005 en el punto "`role` opcional en `/auth/register`")
+Estado: Aceptada (reemplaza parcialmente a ADR-0005 en el punto "`role` opcional en `/auth/register`"; la opción C se implementó en [ADR-0008](0008-administracion-de-roles-auditada.md), #53)
 
 ## Contexto
 ADR-0005 habilitó `role` opcional en `POST /api/v1/auth/register` (`USER`, `CHEF`, `NUTRITIONIST` o `ADMIN`) para facilitar la evaluación del MVP. Con el ciclo de vida completo (#19, #20, #21) eso pasó a ser una vulnerabilidad explotable por cualquier visitante anónimo (#48, OWASP API5 BFLA / API3 mass assignment):

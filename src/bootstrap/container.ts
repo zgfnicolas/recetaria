@@ -25,6 +25,12 @@ import {
   RecipeService,
 } from "../modules/recipes/index.js";
 import type { ReadinessDatabaseClient } from "../shared/http/health.router.js";
+import {
+  createUserAdminRouter,
+  UserAdminController,
+  UserAdminRepository,
+  UserAdminService,
+} from "../modules/users/index.js";
 
 export type { JwtConfig } from "../modules/auth/index.js";
 
@@ -115,8 +121,12 @@ export function buildApiRouters(
     publicRateLimit === false ? undefined : createRateLimitMiddleware(publicRateLimit);
   const recipeRouter = createRecipeRouter(recipeController, authGuard, { publicReadLimiter });
 
+  const userAdminService = new UserAdminService(new UserAdminRepository(prisma));
+  const userAdminRouter = createUserAdminRouter(new UserAdminController(userAdminService), authGuard);
+
   return [
     { path: "/auth", router: authRouter },
     { path: "/recipes", router: recipeRouter },
+    { path: "/users", router: userAdminRouter },
   ];
 }

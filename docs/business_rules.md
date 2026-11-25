@@ -42,6 +42,19 @@ Además de la validación estructural estricta con Zod 4 (`z.strictObject`) en e
 - Origen: requisito 5 de la consigna (validaciones de negocio en capa de servicio) y constraint SQL `chk_prep_time_positive`
 - Se aplica en: `RecipeService.create()` y `RecipeService.update()`
 
+### RN-09 — Administración de roles exclusiva de `ADMIN`, auditada y sin perder la moderación
+Solo un `ADMIN` puede cambiar el rol de otro usuario mediante `PATCH /api/v1/users/:id/role` (body estricto `{ role }`; otro rol → `403` en RBAC). Reglas:
+- **No auto-modificación:** un `ADMIN` no puede cambiar su propio rol (`403`), ni siquiera pidiendo el que ya tiene (`ADMIN` → `ADMIN`): la regla se evalúa antes que la idempotencia.
+- **Revalidación del actor:** dentro de la transacción y con lock, el actor debe seguir siendo un `ADMIN` activo en la base. Un `ADMIN` degradado o desactivado con JWT vigente recibe `403`.
+- **Último `ADMIN`:** el cambio nunca deja el sistema sin `ADMIN` activo (`409`, invariante defensiva). Los `ADMIN` activos se bloquean (`SELECT … FOR NO KEY UPDATE`), así que dos `ADMIN` que se degradan a la vez se serializan.
+- **Idempotencia:** asignar el rol actual responde `200` sin registrar auditoría.
+- **Auditoría atómica:** el `UPDATE` del rol y el registro en `audit_logs` (`entityName = 'User'`, `action = 'ROLE_CHANGED'`, `userId` del `ADMIN`, `oldValues`/`newValues = { role }`) van en la misma `prisma.$transaction`.
+- **Vigencia:** el rol nuevo rige desde el próximo login del destino; su token vigente conserva el rol anterior hasta `1d` (`RN-08`).
+
+Orden de guardas: `401` → `403` RBAC → `400` → `403` auto-modificación → `403` actor no activo → `404` → `409` → `200`. El actor se revalida antes de buscar al destino, así que un `ADMIN` degradado no puede distinguir usuarios existentes (`404` vs `403`).
+- Origen: ADR-0007 (opción C) y ADR-0008; gestión auditada de roles privilegiados (OWASP API5)
+- Se aplica en: `rbacMiddleware(["ADMIN"])`, la política pura `canChangeRole()` (`src/modules/users/users.policy.ts`), `UserAdminService.changeRole()` y `UserAdminRepository.changeRoleWithAudit()`
+
 ## Estados de una receta
 
 ```mermaid
