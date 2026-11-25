@@ -22,7 +22,7 @@ description: >-
 - **API pública por módulo:** un módulo consume a otro exclusivamente desde `src/modules/<feature>/index.ts` (tipos de lectura, DTOs o casos de uso exportados), nunca desde archivos internos. Sin ciclos entre módulos.
 - **Validación y autorización en dos niveles:**
   - *Borde (`validateMiddleware` con Zod):* valida forma, tipos y UUIDv4 (`400 Bad Request`).
-  - *Servicio (`*.service.ts`):* ejecuta reglas de negocio (`RN-01`–`RN-08` en `docs/business_rules.md`) y autorización de recurso (`authorId === req.user.id`, bloqueo de auto-aprobación `RN-05`).
+  - *Servicio (`*.service.ts`):* ejecuta reglas de negocio (`RN-01`–`RN-10` en `docs/business_rules.md`) y autorización de recurso (`authorId === req.user.id`, bloqueo de auto-aprobación `RN-05`).
 - **Errores tipados → JSend centralizado:** `service` lanza subclases de `AppError` con código semántico; un único `errorHandlerMiddleware` traduce `AppError`, `ZodError` y errores Prisma (`P2002` → `409`, `P2025` → `404`) al sobre **JSend extendido** (`docs/sad.md`), logueando inesperados (`5xx`) una sola vez y sin exponer *stack traces* en producción.
 - **Frontera transaccional explícita:** toda operación multi-escritura con auditoría (`APPROVE`, `RESET_TO_DRAFT`, `DELETE` según `RN-06`) corre dentro de `prisma.$transaction`. Nunca abras transacciones desde `controller` ni hagas I/O externo lento dentro de una transacción.
 - **Composition root única:** instanciá `PrismaClient`, repositorios, servicios y controladores en `src/bootstrap/container.ts`. Separá `src/app.ts` (crea la app Express sin `listen()`, lista para Supertest) de `src/server.ts` (`listen()`, señales `SIGTERM`/`SIGINT` y `prisma.$disconnect()`).
@@ -73,7 +73,7 @@ Consultá [`references/patterns-and-tooling.md`](./references/patterns-and-tooli
 | Capa | Qué prueba | Dobles permitidos |
 |---|---|---|
 | **Domain** *(si L2)* | Invariantes y transiciones puras | Ninguno |
-| **Service (`*.service.test.ts`)** | Reglas `RN-01`–`RN-08`, ownership, slug, errores | Fake o mock tipado únicamente del `Repository` |
+| **Service (`*.service.test.ts`)** | Reglas `RN-01`–`RN-10`, ownership, slug, errores | Fake o mock tipado únicamente del `Repository` |
 | **Repository** | Queries Prisma, constraints SQL, `$transaction` | PostgreSQL real (Docker) |
 | **HTTP / Presentation (`tests/`)** | Validación Zod, JWT, RBAC, formato JSend y códigos HTTP | Supertest contra `buildApp()` |
 | **Wiring y Arquitectura** | Arranque de `buildContainer()` + `dependency-cruiser` en CI | Ninguno |
@@ -82,7 +82,7 @@ Consultá [`references/patterns-and-tooling.md`](./references/patterns-and-tooli
 
 - Carpetas globales `src/controllers/`, `src/services/`, `src/repositories/` fuera de `src/modules/<feature>/`.
 - `PrismaClient` instanciado dentro de un servicio o controlador, o modelos ORM devueltos sin proyectar (`passwordHash` expuesto).
-- Lógica de negocio (`RN-01`–`RN-08`) escondida en routers, middlewares o repositorios.
+- Lógica de negocio (`RN-01`–`RN-10`) escondida en routers, middlewares o repositorios.
 - `BaseRepository<T>` genérico sin necesidad, capas L2 vacías para CRUD simples o `src/shared/` convertido en cajón de sastre con lógica de dominio.
 - Imports hacia archivos internos de otro módulo en lugar de su `index.ts`.
 - `actor` o permisos ocultos en `AsyncLocalStorage` en vez de parámetros explícitos.

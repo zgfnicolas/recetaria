@@ -1,6 +1,6 @@
 # Patrones Pragmáticos y Control de Complejidad para Recetaria API
 
-Referencia ejecutable de [pragmatic-engineering-complexity-control](../SKILL.md) 100 % en **TypeScript + Zod 4 + Prisma + PostgreSQL 15 + JSend**, alineada con [ADR-0005](../../../../docs/adr/0005-alcance-mvp-ciclo-recetas-y-auditoria.md) y `RN-01`–`RN-08`.
+Referencia ejecutable de [pragmatic-engineering-complexity-control](../SKILL.md) 100 % en **TypeScript + Zod 4 + Prisma + PostgreSQL 15 + JSend**, alineada con [ADR-0005](../../../../docs/adr/0005-alcance-mvp-ciclo-recetas-y-auditoria.md) y `RN-01`–`RN-10`.
 
 ---
 

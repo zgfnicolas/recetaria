@@ -17,13 +17,13 @@ Enfoque tradicional dirigido por riesgo sobre el modelo **Testing Trophy** de [d
 
 ## 0. Modo de trabajo, informe A–F y reglas duras (MUST)
 
-Antes de escribir tests: auditar arquitectura, runner y CI existentes (no migrar herramientas sin motivo), armar el inventario P0/P1 con su fuente de verdad (`RN-01`–`RN-08`, `docs/prd.md`, `docs/roles.md`), elegir la capa más barata que aporte evidencia real y documentar qué NO se testea.
+Antes de escribir tests: auditar arquitectura, runner y CI existentes (no migrar herramientas sin motivo), armar el inventario P0/P1 con su fuente de verdad (`RN-01`–`RN-10`, `docs/prd.md`, `docs/roles.md`), elegir la capa más barata que aporte evidencia real y documentar qué NO se testea.
 
 **Informe de intervención:** **A.** Diagnóstico · **B.** Plan (inventario + exclusiones) · **C.** Implementación · **D.** Verificación (comandos y salida real + sensibilidad de cada P0) · **E.** Riesgos residuales · **F.** Recomendaciones.
 **Estados honestos:** `diseñado → implementado → ejecutado → validado → auditado` (nunca reportar un estado no alcanzado).
 
 **Reglas duras:**
-1. **Oráculo independiente:** el resultado esperado sale de un requisito (`RN-01`–`RN-08`), contrato JSend o invariante, nunca de lo que devuelve hoy el código ni del mismo algoritmo duplicado en el test.
+1. **Oráculo independiente:** el resultado esperado sale de un requisito (`RN-01`–`RN-10`), contrato JSend o invariante, nunca de lo que devuelve hoy el código ni del mismo algoritmo duplicado en el test.
 2. **Prueba de sensibilidad obligatoria en P0:** todo test P0 tiene control negativo comprobado (introducir el defecto, verlo fallar con mensaje claro, revertir) o mutante muerto en `Stryker`.
 3. **Regresión real:** todo bug en un área crítica recibe un test que falla antes del fix y pasa después.
 4. **Integración real:** PostgreSQL **15** real (Docker Compose o `@testcontainers/postgresql`) con migraciones reales; cualquier HTTP saliente simulado con `MSW` estricto (`onUnhandledRequest: "error"`).

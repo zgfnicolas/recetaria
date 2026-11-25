@@ -40,6 +40,9 @@ Una capa solo importa de la siguiente. Los servicios y controladores nunca llama
 - Solo `CHEF` o `NUTRITIONIST` pueden aprobar recetas (`RN-04`) y no pueden auto-aprobar las propias (`RN-05`)
 - Toda aprobación (`APPROVE`), reinicio por edición (`RESET_TO_DRAFT`) y borrado (`DELETE`) ejecuta actualización/borrado de `recipes` e inserción en `audit_logs` dentro de `prisma.$transaction` (`RN-06`)
 - `prepTimeMinutes` entre `1` y `1440` y al menos un ingrediente en `ingredients`, todos con `quantity > 0` (`RN-07`); contraseñas con Bcrypt `>= 10` rounds (`RN-08`)
+- La autorización usa siempre el rol y el estado **vigentes** del actor en la base, no los del JWT: un usuario inexistente o con `isActive = false` recibe `401` (`RN-08`, ADR-0009)
+- Solo un `ADMIN` activo (revalidado con lock en la transacción) cambia el rol de **otro** usuario, nunca el propio ni dejando el sistema sin `ADMIN` activo, con `ROLE_CHANGED` en `audit_logs` dentro de `prisma.$transaction` (`RN-09`)
+- Solo un `ADMIN` activo activa o desactiva la cuenta de **otro** usuario, nunca la propia ni al último `ADMIN` activo, con `ACCOUNT_ACTIVATED`/`ACCOUNT_DEACTIVATED` en `audit_logs` dentro de `prisma.$transaction` (`RN-10`)
 
 ## Convenciones
 - TypeScript estricto: prohibido `any`; inferir DTOs con `z.infer<typeof schema>`

@@ -32,7 +32,7 @@ Antes de aprobar una capa, patrón, librería o caso borde, relevá: **propuesta
 
 ## 1. Principios y puertas de una vía vs dos vías
 
-- **Principios operativos:** *YAGNI* (no programar "por si acaso" sin disparador) · *KISS* · *complejidad esencial vs accidental* (no simplificar reglas reales `RN-01`–`RN-08`, sí eliminar capas vacías) · *regla de tres* (abstraer al 3.er uso real, pero centralizar conocimiento de negocio desde el 1.er duplicado) · *abstracción equivocada* (duplicar es más barato que mantener una mala abstracción) · *tecnología aburrida* (PostgreSQL + Express + Prisma antes de sumar Redis/colas sin métrica) · *último momento responsable*.
+- **Principios operativos:** *YAGNI* (no programar "por si acaso" sin disparador) · *KISS* · *complejidad esencial vs accidental* (no simplificar reglas reales `RN-01`–`RN-10`, sí eliminar capas vacías) · *regla de tres* (abstraer al 3.er uso real, pero centralizar conocimiento de negocio desde el 1.er duplicado) · *abstracción equivocada* (duplicar es más barato que mantener una mala abstracción) · *tecnología aburrida* (PostgreSQL + Express + Prisma antes de sumar Redis/colas sin métrica) · *último momento responsable*.
 
 | Puerta de **dos vías** *(decidir simple hoy)* | Puerta de **una vía** *(invertir diseño ahora)* |
 |---|---|
