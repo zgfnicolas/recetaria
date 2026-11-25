@@ -6,7 +6,7 @@ import {
   type RegisterDTO,
   type UserRole,
 } from "./auth.schema.js";
-import { assertValidJwtConfig, signAccessToken, type JwtConfig } from "./jwt.js";
+import { assertValidJwtConfig, signAccessToken, type Actor, type JwtConfig } from "./jwt.js";
 import type { IUserRepository } from "./user.repository.js";
 
 /** Factor de costo mínimo exigido para Bcrypt (`RN-08`). */
@@ -147,5 +147,18 @@ export class AuthService implements IAuthService {
         role: user.role,
       },
     };
+  }
+
+  /**
+   * Resuelve el actor de un JWT ya verificado contra su estado **vigente** en la base (#56,
+   * ADR-0009): `{ id, role }` con el rol actual si existe y está activo; si no, `null`.
+   * La consume `createAuthMiddleware` (vía el contenedor), no el controlador (fuera de `IAuthService`).
+   */
+  async resolveActiveActor(id: string): Promise<Actor | null> {
+    const user = await this.#userRepository.findById(id);
+    if (user === null || !user.isActive) {
+      return null;
+    }
+    return Object.freeze({ id: user.id, role: user.role });
   }
 }

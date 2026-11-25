@@ -114,7 +114,7 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
         success: true,
         statusCode: 200,
         message: "Rol actualizado exitosamente",
-        data: { id: user.id, email: user.email, role },
+        data: { id: user.id, email: user.email, role, isActive: true },
       });
       expect(JSON.stringify(res.body)).not.toContain("passwordHash");
       expect(JSON.stringify(res.body)).not.toContain("$2b$");
@@ -159,7 +159,7 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
       expect(await db.prisma.user.count({ where: { role: "ADMIN", isActive: true } })).toBe(2);
     });
 
-    it("riesgo asumido (RN-08): un CHEF degradado a USER sigue aprobando con su JWT anterior hasta que vence", async () => {
+    it("riesgo cerrado (ADR-0009): un CHEF degradado a USER deja de aprobar de inmediato aunque su JWT siga vigente", async () => {
       // Arrange — el CHEF inicia sesión antes de ser degradado
       const chef = await seedUser(db, "chef-degradado@recetaria.com", "CHEF");
       const chefSession = await loginAs(app, { email: chef.email, password: chef.password });
@@ -182,9 +182,11 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
         .set("If-Match", '"1"');
       const relogin = await loginAs(app, { email: chef.email, password: chef.password });
 
-      // Assert — el endpoint degradó en la base, pero el token stateless conserva CHEF (≤ 1d, #52)
+      // Assert — el token viejo dice CHEF, pero authMiddleware impone el rol vigente (USER) → RBAC 403
       expect(demote.status).toBe(200);
-      expect(approveWithOldToken.status).toBe(200);
+      expect((jwt.decode(chefSession.token) as { role?: unknown } | null)?.role).toBe("CHEF");
+      expect(approveWithOldToken.status).toBe(403);
+      expect(await db.prisma.auditLog.count({ where: { action: "APPROVE" } })).toBe(0);
       expect((jwt.decode(relogin.token) as { role?: unknown } | null)?.role).toBe("USER");
     });
 
@@ -194,11 +196,11 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
 
       // Assert
       expect(res.status).toBe(200);
-      expect(res.body.data).toEqual({ id: user.id, email: user.email, role: "USER" });
+      expect(res.body.data).toEqual({ id: user.id, email: user.email, role: "USER", isActive: true });
       expect(await db.prisma.auditLog.count()).toBe(0);
     });
 
-    it("el rol nuevo rige desde el próximo login; el token anterior conserva el rol hasta vencer", async () => {
+    it("el rol nuevo rige de inmediato, incluso con el token anterior; el próximo login lo refleja en el JWT", async () => {
       // Arrange — sesión previa del usuario como USER
       const before = await loginAs(app, { email: user.email, password: user.password });
 
@@ -206,12 +208,12 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
       await patchRole(user.id, { role: "CHEF" });
       const after = await loginAs(app, { email: user.email, password: user.password });
 
-      // Assert — JWT nuevo con CHEF; el anterior sigue diciendo USER (stateless, RN-08)
+      // Assert — el JWT anterior sigue diciendo USER, el nuevo dice CHEF
       const roleIn = (token: string): unknown => (jwt.decode(token) as { role?: unknown } | null)?.role;
       expect(roleIn(before.token)).toBe("USER");
       expect(roleIn(after.token)).toBe("CHEF");
 
-      // Assert — el CHEF promovido puede aprobar una receta ajena; con el token viejo, no
+      // Assert — authMiddleware impone el rol vigente: con el token viejo (claim USER) ya aprueba
       const recipe = await db.prisma.recipe.create({
         data: {
           title: "Receta a aprobar",
@@ -227,8 +229,24 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
           .put(`/api/v1/recipes/${recipe.id}/approve`)
           .set("Authorization", `Bearer ${token}`)
           .set("If-Match", '"1"');
-      expect((await approveWith(before.token)).status).toBe(403);
-      expect((await approveWith(after.token)).status).toBe(200);
+      expect((await approveWith(before.token)).status).toBe(200);
+
+      // Y con el JWT nuevo también puede aprobar otra receta ajena
+      const another = await db.prisma.recipe.create({
+        data: {
+          title: "Otra receta a aprobar",
+          slug: "otra-receta-a-aprobar-0a1b2c3d",
+          description: "Segunda receta de otro autor para el token nuevo.",
+          prepTimeMinutes: 10,
+          ingredients: [{ name: "Sal", quantity: 1, unit: "g" }],
+          authorId: admin.id,
+        },
+      });
+      const approveAnother = await request(app)
+        .put(`/api/v1/recipes/${another.id}/approve`)
+        .set("Authorization", `Bearer ${after.token}`)
+        .set("If-Match", '"1"');
+      expect(approveAnother.status).toBe(200);
     });
   });
 
@@ -303,29 +321,28 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
     });
 
     it.each([
-      ["degradado a USER en la base", { role: "USER" as const }],
-      ["desactivado (isActive = false)", { isActive: false }],
-    ])("revalida al actor en la base: un ADMIN %s con JWT vigente recibe 403", async (_label, data) => {
-      // Arrange — su JWT todavía dice ADMIN (stateless), pero la base ya no
+      ["degradado a USER en la base", { role: "USER" as const }, 403],
+      ["desactivado (isActive = false)", { isActive: false }, 401],
+    ])("con el estado vigente (ADR-0009), un ADMIN %s con JWT vigente no administra roles (%d)", async (_label, data, status) => {
+      // Arrange — su JWT todavía dice ADMIN, pero la base ya no: authMiddleware lo resuelve antes
       await db.prisma.user.update({ where: { id: otherAdmin.id }, data });
 
       // Act
       const res = await patchRole(user.id, { role: "ADMIN" }, otherAdmin);
 
       // Assert
-      expect(res.status).toBe(403);
-      expect(res.body).toMatchObject({ message: ACTOR_NOT_ACTIVE_ADMIN_MESSAGE });
+      expect(res.status).toBe(status);
       expect(await roleOf(user.id)).toBe("USER");
       expect(await db.prisma.auditLog.count()).toBe(0);
     });
 
-    it("un JWT ADMIN válido de un usuario que ya no existe recibe 403 sin escritura parcial", async () => {
+    it("un JWT ADMIN válido de un usuario que ya no existe recibe 401 en authMiddleware, sin escritura parcial", async () => {
       // Act
       const res = await patchRole(user.id, { role: "ADMIN" }, { id: randomUUID(), role: "ADMIN" });
 
       // Assert
-      expect(res.status).toBe(403);
-      expect(res.body).toMatchObject({ message: ACTOR_NOT_ACTIVE_ADMIN_MESSAGE });
+      expect(res.status).toBe(401);
+      expect(res.body).toMatchObject({ message: "Token inválido o expirado" });
       expect(await roleOf(user.id)).toBe("USER");
       expect(await db.prisma.auditLog.count()).toBe(0);
     });
@@ -337,9 +354,8 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
       // Act
       const res = await patchRole("99999999-9999-4999-8999-999999999999", { role: "CHEF" }, otherAdmin);
 
-      // Assert
+      // Assert — lo frena RBAC con el rol vigente, antes de cualquier búsqueda
       expect(res.status).toBe(403);
-      expect(res.body).toMatchObject({ message: ACTOR_NOT_ACTIVE_ADMIN_MESSAGE });
     });
   });
 
@@ -389,6 +405,10 @@ describe("PATCH /api/v1/users/:id/role — Administración de roles auditada (#5
 
       // Assert
       expect(responses.map((res) => res.status).sort()).toEqual([200, 403]);
+      // El perdedor ya pasó authMiddleware: lo frena la revalidación con lock dentro de la transacción
+      expect(responses.find((res) => res.status === 403)?.body).toMatchObject({
+        message: ACTOR_NOT_ACTIVE_ADMIN_MESSAGE,
+      });
       expect(await db.prisma.user.count({ where: { role: "ADMIN", isActive: true } })).toBe(1);
       expect(await db.prisma.auditLog.count({ where: { action: "ROLE_CHANGED" } })).toBe(1);
     });

@@ -493,3 +493,43 @@ describe("AuthService.login (RN-08)", () => {
     expect(propagatedError).not.toBeInstanceOf(UnauthorizedError);
   });
 });
+
+describe("AuthService.resolveActiveActor (#56, ADR-0009)", () => {
+  const ID = "11111111-1111-4111-8111-111111111111";
+
+  it("devuelve { id, role } congelado con el rol vigente de la base", async () => {
+    // Arrange
+    const { repository, findById } = createMockRepository();
+    findById.mockResolvedValueOnce(buildPersistedUser({ id: ID, role: "NUTRITIONIST", isActive: true }));
+
+    // Act
+    const actor = await new AuthService(repository).resolveActiveActor(ID);
+
+    // Assert
+    expect(findById).toHaveBeenCalledWith(ID);
+    expect(actor).toEqual({ id: ID, role: "NUTRITIONIST" });
+    expect(Object.isFrozen(actor)).toBe(true);
+  });
+
+  it.each([
+    ["el usuario no existe", null],
+    ["el usuario está inactivo", "inactive"],
+  ] as const)("devuelve null si %s", async (_label, scenario) => {
+    // Arrange
+    const { repository, findById } = createMockRepository();
+    findById.mockResolvedValueOnce(scenario === null ? null : buildPersistedUser({ id: ID, isActive: false }));
+
+    // Act & Assert
+    expect(await new AuthService(repository).resolveActiveActor(ID)).toBeNull();
+  });
+
+  it("propaga los errores del repositorio sin convertirlos en null", async () => {
+    // Arrange
+    const { repository, findById } = createMockRepository();
+    const failure = new Error("timeout");
+    findById.mockRejectedValueOnce(failure);
+
+    // Act & Assert
+    await expect(new AuthService(repository).resolveActiveActor(ID)).rejects.toBe(failure);
+  });
+});

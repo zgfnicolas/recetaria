@@ -1,5 +1,5 @@
 # PRD — Recetaria API
-Versión 1.5 · Última actualización: 2026-11-24 · Responsable: Facundo Nicolás González
+Versión 1.6 · Última actualización: 2026-11-24 · Responsable: Facundo Nicolás González
 
 ## 1. Visión
 Centralizar un catálogo confiable de recetas gastronómicas donde el contenido generado por la comunidad es validado clínica y culinariamente por nutricionistas y chefs profesionales.
@@ -19,10 +19,11 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 ## 5. Alcance
 ### Incluido en la versión 1 (MVP)
 - **Base arquitectónica:** Node.js 24 LTS, ESM nativo (`nodenext`), Express 5, TypeScript 7 estricto (`tsx` en desarrollo) y PostgreSQL 15 + Prisma 7 GA (`@prisma/adapter-pg`) organizados por componentes (`auth`, `recipes`, `users`) en 4 capas (`Router -> Controller -> Service -> Repository`), con `src/app.ts` separado de `src/server.ts`.
-- **Modelos activos (3):** `User`, `Recipe` y `AuditLog` (autenticación 100 % stateless sin tabla `sessions`).
-- **Seguridad e identidad:** registro (`POST /api/v1/auth/register`, que crea siempre `USER` y rechaza `role` con `400`, ADR-0007) y login (`POST /api/v1/auth/login`) con Bcrypt (`>= 10` rounds), rechazo `401` si `isActive === false` y Bearer JWT (`{ id, role }`), más usuarios semilla (*seed*) para los 4 roles.
+- **Modelos activos (3):** `User`, `Recipe` y `AuditLog` (autenticación JWT sin tabla `sessions`; la autorización usa el estado vigente del actor, ADR-0009).
+- **Seguridad e identidad:** registro (`POST /api/v1/auth/register`, que crea siempre `USER` y rechaza `role` con `400`, ADR-0007) y login (`POST /api/v1/auth/login`) con Bcrypt (`>= 10` rounds), rechazo `401` si `isActive === false` (en el login y en toda ruta protegida, con el rol vigente de la base) y Bearer JWT (`{ id, role }`), más usuarios semilla (*seed*) para los 4 roles.
 - **CRUD de recetas:** alta (`POST /api/v1/recipes`), lectura pública paginada (`GET /api/v1/recipes` con `?page=&limit=`, `GET /api/v1/recipes/:id`), consulta autenticada de recetas propias (`GET /api/v1/recipes/mine`), edición parcial o completa por el autor (`PUT /api/v1/recipes/:id`) y borrado físico por el autor o `ADMIN` (`DELETE /api/v1/recipes/:id`).
 - **Validaciones:** Zod 4 estricto (`z.strictObject`) en middleware para formato/tipos/prevención BOPLA (incluyendo `tags` acotado y `nutritionalInfo` tipado) y validaciones explícitas de negocio en `RecipeService` (`prepTimeMinutes` entre `1` y `1440`, ingredientes con `quantity > 0`, ownership, bloqueo de auto-aprobación y detección de receta ya aprobada).
+- **Administración de cuentas:** `PATCH /api/v1/users/:id/status` (activar/desactivar, exclusivo de `ADMIN`, con `ACCOUNT_*` en `audit_logs`, `RN-10`, #56).
 - **Administración de roles:** `PATCH /api/v1/users/:id/role`, exclusivo de `ADMIN` (revalidado en la base), con registro `ROLE_CHANGED` en `audit_logs` dentro de `prisma.$transaction` (`RN-09`, ADR-0008, #53).
 - **Aprobación profesional:** transición `DRAFT -> APPROVED` en `PUT /api/v1/recipes/:id/approve` exclusiva de `CHEF`/`NUTRITIONIST` con registro en `audit_logs` (`entityName = "Recipe"`) dentro de `prisma.$transaction`.
 - **Extras del TP integrados:** filtros con `req.query` (`?status=`, `?difficulty=`, `?authorId=`, `?page=`, `?limit=`), control de roles RBAC, relación `User`–`Recipe` (`authorId`, `reviewedById`) y middleware de logging HTTP en consola (`loggerMiddleware`).
@@ -46,6 +47,7 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 | HU-06 | autor o administrador | eliminar físicamente una receta | retirar contenido propio o moderar el catálogo con auditoría | Media |
 | HU-07 | chef o nutricionista | aprobar una receta en `DRAFT` de otro autor | publicarla como `APPROVED` con registro de auditoría | Alta |
 | HU-08 | administrador | cambiar el rol de otro usuario | otorgar o revocar perfiles profesionales y de moderación con trazabilidad | Media |
+| HU-09 | administrador | desactivar o reactivar la cuenta de otro usuario | suspender el acceso de inmediato sin borrar su contenido, con trazabilidad | Media |
 
 ### Criterios de aceptación
 
@@ -79,14 +81,19 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 - Dado un `CHEF` o `NUTRITIONIST` distinto del autor sobre una receta en `DRAFT`, entonces dentro de `prisma.$transaction` cambia el estado a `APPROVED`, registra `reviewedById` y `publishedAt`, e inserta el evento `APPROVE` en `audit_logs`.
 
 **HU-08 — Administración de roles**
-- Dado un `ADMIN` activo y otro usuario existente, cuando envía `PATCH /api/v1/users/:id/role` con `{ role }` válido, entonces dentro de `prisma.$transaction` cambia el rol, inserta `ROLE_CHANGED` en `audit_logs` y retorna `200 OK` con `{ id, email, role }`. Si ya tenía ese rol, retorna `200` sin auditar.
+- Dado un `ADMIN` activo y otro usuario existente, cuando envía `PATCH /api/v1/users/:id/role` con `{ role }` válido, entonces dentro de `prisma.$transaction` cambia el rol, inserta `ROLE_CHANGED` en `audit_logs` y retorna `200 OK` con `{ id, email, role, isActive }`. Si ya tenía ese rol, retorna `200` sin auditar.
 - Dado un `USER`, `CHEF` o `NUTRITIONIST`, un `ADMIN` que intenta cambiar su propio rol o un `ADMIN` ya degradado o desactivado en la base con JWT vigente, entonces recibe `403 Forbidden`. Un `:id` inexistente devuelve `404` y un cambio que dejaría el sistema sin `ADMIN` activo devuelve `409`.
+
+**HU-09 — Activación y desactivación de cuentas**
+- Dado un `ADMIN` activo y otro usuario existente, cuando envía `PATCH /api/v1/users/:id/status` con `{ isActive }` booleano, entonces dentro de `prisma.$transaction` cambia el estado, inserta `ACCOUNT_DEACTIVATED` o `ACCOUNT_ACTIVATED` en `audit_logs` y retorna `200 OK` con `{ id, email, role, isActive }`. Si ya tenía ese estado, retorna `200` sin auditar.
+- Dado un usuario desactivado, cuando usa un JWT todavía vigente en cualquier ruta protegida, entonces recibe `401 Unauthorized` de inmediato; al reactivarlo, vuelve a operar.
+- Dado un `USER`, `CHEF` o `NUTRITIONIST`, o un `ADMIN` sobre su propia cuenta, entonces recibe `403 Forbidden`. Un `:id` inexistente devuelve `404`, y desactivar al último `ADMIN` activo devuelve `409`.
 
 ## 7. Requisitos no funcionales
 | ID | Categoría | Requisito |
 |---|---|---|
 | RNF-01 | Rendimiento | El 95 % (P95) de las consultas de lectura (`GET /api/v1/recipes`) responden en menos de 150 ms apoyadas en índices B-Tree. |
-| RNF-02 | Seguridad | Contraseñas con Bcrypt (`>= 10` rounds), autenticación JWT stateless, control RBAC estricto y secretos aislados en `.env` (`.gitignore`). |
+| RNF-02 | Seguridad | Contraseñas con Bcrypt (`>= 10` rounds), autenticación JWT sin sesiones con autorización sobre el estado vigente del actor (ADR-0009), control RBAC estricto y secretos aislados en `.env` (`.gitignore`). |
 | RNF-03 | Fiabilidad | Transacciones compuestas en `prisma.$transaction` ACID; el 100 % de los controladores usa `try/catch` devolviendo formato JSend sin filtrar stack traces. |
 | RNF-04 | Mantenibilidad | Arquitectura modular en 4 capas (`Router -> Controller -> Service -> Repository`), TypeScript estricto sin `any` y validación Zod previa al controlador. |
 

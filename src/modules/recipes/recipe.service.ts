@@ -5,6 +5,7 @@ import {
   ForbiddenError,
   NotFoundError,
   PreconditionFailedError,
+  UnauthorizedError,
   type ErrorDetail,
 } from "../../shared/errors/app-error.js";
 import type { EntityTag } from "../../shared/http/entity-tag.js";
@@ -20,6 +21,7 @@ import {
   type UpdateRecipeDTO,
 } from "./recipe.schema.js";
 import { generateRecipeSlug } from "./recipe.slug.js";
+import { INVALID_AUTHOR_MESSAGE } from "./recipe.repository.js";
 import type {
   IRecipeRepository,
   PaginatedRecipes,
@@ -218,10 +220,16 @@ export class RecipeService implements IRecipeService {
       recipeId,
       reviewerId: actor.id,
       expectedVersions,
+      // `RN-04`/`RN-05` reevaluadas con el rol vigente y bloqueado del revisor (ADR-0009).
+      authorize: (current) => canApprove(current, found.recipe),
     });
     switch (result.outcome) {
       case "approved":
         return { recipe: result.recipe, version: result.version };
+      case "actor_inactive":
+        throw new UnauthorizedError(INVALID_AUTHOR_MESSAGE);
+      case "actor_forbidden":
+        throw new ForbiddenError(RECIPE_APPROVAL_FORBIDDEN_MESSAGE);
       case "not_found":
         throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
       case "precondition_failed":
@@ -278,11 +286,22 @@ export class RecipeService implements IRecipeService {
       throw new ForbiddenError(RECIPE_DELETE_FORBIDDEN_MESSAGE);
     }
 
-    const result = await this.#recipeRepository.deleteWithAudit({ recipeId, actorId: actor.id });
-    if (result.outcome === "not_found") {
-      throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
+    const result = await this.#recipeRepository.deleteWithAudit({
+      recipeId,
+      actorId: actor.id,
+      // `RN-03` reevaluada con el rol vigente y bloqueado del actor (ADR-0009).
+      authorize: (current) => canDelete(current, recipe),
+    });
+    switch (result.outcome) {
+      case "deleted":
+        return { id: recipeId };
+      case "actor_inactive":
+        throw new UnauthorizedError(INVALID_AUTHOR_MESSAGE);
+      case "actor_forbidden":
+        throw new ForbiddenError(RECIPE_DELETE_FORBIDDEN_MESSAGE);
+      case "not_found":
+        throw new NotFoundError(RECIPE_NOT_FOUND_MESSAGE);
     }
-    return { id: recipeId };
   }
 
   /** Copia solo los campos presentes (sin `undefined`) y agrega el `slug` si cambia `title`. */

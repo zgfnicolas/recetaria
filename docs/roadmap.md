@@ -3,7 +3,7 @@
 ## Ahora — v0.x (MVP Académico)
 Objetivo: entregar una API REST funcional para `Auth` y `Recipes` con arquitectura en 4 capas, Docker reproducible y pruebas verificadas.
 - Esquema de base de datos en PostgreSQL 15 y Prisma 7 GA (`users`, `recipes`, `audit_logs`)
-- Registro y login stateless con Bcrypt y JWT
+- Registro y login con Bcrypt y JWT sin sesiones; autorización con el estado vigente del usuario (ADR-0009)
 - CRUD completo de recetas con filtros (`status`, `difficulty`, `authorId`) y paginación acotada (`page`, `limit`)
 - Aprobación profesional exclusiva (`CHEF`, `NUTRITIONIST`) con auditoría transaccional (`audit_logs`)
 - Colección de Thunder Client y suite de pruebas unitarias/integración

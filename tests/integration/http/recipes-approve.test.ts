@@ -23,7 +23,6 @@ import {
   type UserRole,
 } from "../../../src/modules/auth/index.js";
 import {
-  INVALID_AUTHOR_MESSAGE,
   RECIPE_ALREADY_APPROVED_MESSAGE,
   RECIPE_APPROVAL_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
@@ -291,7 +290,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       expect(res.status).toBe(401);
     });
 
-    it("responde 401 si el revisor del JWT ya no existe en users (P2003), sin escritura parcial", async () => {
+    it("responde 401 si el revisor del JWT ya no existe en users (authMiddleware, ADR-0009), sin escritura parcial", async () => {
       // Arrange
       const ghost = { id: randomUUID(), role: "CHEF" } as const;
 
@@ -305,7 +304,7 @@ describe("PUT /api/v1/recipes/:id/approve — Aprobación profesional (Integraci
       expect(res.status).toBe(401);
       expect(res.body).toMatchObject({
         success: false,
-        message: INVALID_AUTHOR_MESSAGE,
+        message: "Token inválido o expirado",
       });
       await expectUnchangedDraft(DRAFT_ID);
     });

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Prisma } from "../../generated/prisma/client.js";
 import type { AppPrismaClient } from "../../infrastructure/database/prisma.js";
 import { AppError, ConflictError, UnauthorizedError } from "../../shared/errors/app-error.js";
+import { USER_ROLES, type Actor } from "../auth/index.js";
 import {
   RECIPE_STATUSES,
   type IngredientDTO,
@@ -87,11 +88,27 @@ export type RecipeApprovalSnapshot = Readonly<{
 /** Receta junto con su versión de contenido (`ETag`, #46); la versión nunca viaja en el JSON. */
 export type VersionedRecipe = Readonly<{ recipe: RecipeRecord; version: number }>;
 
+/**
+ * Regla de autorización que el servicio delega para evaluarla sobre el estado **vigente y
+ * bloqueado** del actor (`SELECT … FOR SHARE`, ADR-0009): cierra la ventana entre `authMiddleware`
+ * y la transacción en la que una degradación o desactivación concurrente ya confirmada se ignoraría.
+ */
+export type ActorAuthorization = (current: Actor) => boolean;
+
+/**
+ * Resultados de la revalidación del actor dentro de la transacción:
+ * `actor_inactive` (inexistente o `isActive = false` → `401`) y
+ * `actor_forbidden` (su rol vigente ya no lo autoriza → `403`).
+ */
+export type ActorRevalidationOutcome = Readonly<{ outcome: "actor_inactive" }> | Readonly<{ outcome: "actor_forbidden" }>;
+
 export type ApproveWithAuditInput = Readonly<{
   recipeId: string;
   reviewerId: string;
   /** Versiones aceptadas por el `If-Match` del revisor (bloqueo optimista, #46). */
   expectedVersions: readonly number[];
+  /** `canApprove` evaluado sobre el revisor bloqueado (ADR-0009). */
+  authorize: ActorAuthorization;
 }>;
 
 /**
@@ -103,6 +120,7 @@ export type ApproveWithAuditInput = Readonly<{
  */
 export type ApproveWithAuditResult =
   | Readonly<{ outcome: "approved"; recipe: RecipeRecord; version: number }>
+  | ActorRevalidationOutcome
   | Readonly<{ outcome: "not_found" }>
   | Readonly<{ outcome: "precondition_failed" }>
   | Readonly<{ outcome: "already_approved" }>;
@@ -141,10 +159,15 @@ export type UpdateWithOptionalResetResult =
 export type DeleteWithAuditInput = Readonly<{
   recipeId: string;
   actorId: string;
+  /** `canDelete` evaluado sobre el actor bloqueado (ADR-0009). */
+  authorize: ActorAuthorization;
 }>;
 
 /** Resultado de `deleteWithAudit`; `not_found` si otro borrado concurrente ganó la carrera (`404`). */
-export type DeleteWithAuditResult = Readonly<{ outcome: "deleted" }> | Readonly<{ outcome: "not_found" }>;
+export type DeleteWithAuditResult =
+  | Readonly<{ outcome: "deleted" }>
+  | ActorRevalidationOutcome
+  | Readonly<{ outcome: "not_found" }>;
 
 /** Snapshot mínimo que `RN-03` conserva en `audit_logs.oldValues` tras el borrado físico. */
 export type RecipeDeletionSnapshot = Readonly<{
@@ -394,6 +417,11 @@ export class RecipeRepository implements IRecipeRepository {
     const publishedAt = new Date();
     try {
       return await this.#prisma.$transaction(async (tx): Promise<ApproveWithAuditResult> => {
+        // Orden fijo de bloqueo: primero el actor (`FOR SHARE`), después la receta.
+        const revalidation = await revalidateActor(tx, input.reviewerId, input.authorize);
+        if (revalidation !== null) {
+          return revalidation;
+        }
         const previous = await lockRecipeLifecycle(tx, input.recipeId);
         if (previous === null) {
           return { outcome: "not_found" };
@@ -505,6 +533,11 @@ export class RecipeRepository implements IRecipeRepository {
   async deleteWithAudit(input: DeleteWithAuditInput): Promise<DeleteWithAuditResult> {
     try {
       return await this.#prisma.$transaction(async (tx): Promise<DeleteWithAuditResult> => {
+        // Orden fijo de bloqueo: primero el actor (`FOR SHARE`), después la receta.
+        const revalidation = await revalidateActor(tx, input.actorId, input.authorize);
+        if (revalidation !== null) {
+          return revalidation;
+        }
         const snapshot = await lockRecipeForDelete(tx, input.recipeId);
         if (snapshot === null) {
           return { outcome: "not_found" };
@@ -535,6 +568,40 @@ export class RecipeRepository implements IRecipeRepository {
 }
 
 type TransactionClient = Parameters<Parameters<AppPrismaClient["$transaction"]>[0]>[0];
+
+const lockedActorRowSchema = z.object({
+  id: z.uuid(),
+  role: z.enum(USER_ROLES),
+  isActive: z.boolean(),
+});
+
+/**
+ * Revalida al actor sobre su fila bloqueada con `SELECT … FOR SHARE` (ADR-0009): espera a que
+ * confirme cualquier cambio de rol o estado en curso (`/role`, `/status` toman `FOR NO KEY UPDATE`,
+ * incompatible con `FOR SHARE`) y bloquea los posteriores hasta el fin de esta transacción, así que
+ * la operación se decide con el estado confirmado. Ninguna transacción de `users` bloquea filas de
+ * `recipes`, por lo que el orden actor → receta no forma ciclos. `null` = autorizado.
+ */
+async function revalidateActor(
+  tx: TransactionClient,
+  actorId: string,
+  authorize: ActorAuthorization,
+): Promise<ActorRevalidationOutcome | null> {
+  const rows = await tx.$queryRaw<unknown[]>`
+    SELECT id, role, "isActive" FROM "users" WHERE id = ${actorId}::uuid FOR SHARE`;
+  const parsed = z.array(lockedActorRowSchema).max(1).safeParse(rows);
+  if (!parsed.success) {
+    throw new AppError(500, "Fila de actor bloqueada con formato inválido", {
+      isOperational: false,
+      cause: parsed.error,
+    });
+  }
+  const [current] = parsed.data;
+  if (current === undefined || !current.isActive) {
+    return { outcome: "actor_inactive" };
+  }
+  return authorize(Object.freeze({ id: current.id, role: current.role })) ? null : { outcome: "actor_forbidden" };
+}
 
 /** Lectura defensiva de la fila bloqueada para el borrado: inconsistencia → `500`. */
 const lockedDeletionRowSchema = z.object({
