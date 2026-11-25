@@ -17,7 +17,8 @@ services:
     tmpfs:
       - /tmp:size=64M,mode=1777
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
+      # Fijo (no se interpola desde .env): la imagen de producción siempre corre en production (#24)
+      NODE_ENV: production
       PORT: 3000
       NODE_OPTIONS: "--max-old-space-size=384"
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-recetaria}?schema=public
@@ -31,9 +32,45 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      # La API nunca arranca contra un esquema sin migrar
+      migrate:
+        condition: service_completed_successfully
     cpus: 1.0
     mem_limit: 512m
     pids_limit: 200
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # One-shot: aplica las migraciones pendientes y termina (exit 0) antes de que arranque `api` (#24)
+  migrate:
+    build:
+      context: .
+      target: migrator
+    image: recetaria/migrate:${IMAGE_TAG:-1.0.0}
+    init: true
+    restart: "no"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64M,mode=1777
+    environment:
+      # Fase Beta: apuntar MIGRATION_DATABASE_URL a un rol DDL dedicado (recetaria_migrator)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-recetaria}?schema=public
+      MIGRATION_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-recetaria}?schema=public
+    networks:
+      - data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    cpus: 0.5
+    mem_limit: 256m
+    pids_limit: 100
     logging:
       driver: local
       options:

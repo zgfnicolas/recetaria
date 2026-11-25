@@ -27,7 +27,7 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 - **Administración de roles:** `PATCH /api/v1/users/:id/role`, exclusivo de `ADMIN` (revalidado en la base), con registro `ROLE_CHANGED` en `audit_logs` dentro de `prisma.$transaction` (`RN-09`, ADR-0008, #53).
 - **Aprobación profesional:** transición `DRAFT -> APPROVED` en `PUT /api/v1/recipes/:id/approve` exclusiva de `CHEF`/`NUTRITIONIST` con registro en `audit_logs` (`entityName = "Recipe"`) dentro de `prisma.$transaction`.
 - **Extras del TP integrados:** filtros con `req.query` (`?status=`, `?difficulty=`, `?authorId=`, `?page=`, `?limit=`), control de roles RBAC, relación `User`–`Recipe` (`authorId`, `reviewedById`) y middleware de logging HTTP en consola (`loggerMiddleware`).
-- **Operación y entrega:** endpoints `GET /health` (liveness liviano sin DB para Docker `HEALTHCHECK`) y `GET /health/ready` (readiness verificando PostgreSQL), respuestas en formato JSend extendido (`200`, `201`, `400`, `401`, `403`, `404`, `409`, `500`, `503`) y colección exportada en `docs/thunder-client-collection.json`.
+- **Operación y entrega:** endpoints `GET /health` (liveness liviano sin DB para Docker `HEALTHCHECK`) y `GET /health/ready` (readiness verificando PostgreSQL), respuestas en formato JSend extendido (`200`, `201`, `304`, `400`, `401`, `403`, `404`, `409`, `412`, `428`, `429`, `500`, `503`) y colección exportada en `docs/thunder-client-collection.json`.
 
 ### Fuera de alcance
 - Funcionalidades sociales secundarias (likes, comentarios, seguidores y perfiles extendidos).

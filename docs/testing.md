@@ -9,6 +9,7 @@ Adoptamos el modelo **Testing Trophy** priorizando pruebas de integración HTTP 
 | **Integración** | 50 % | Supertest + PostgreSQL Docker | Endpoints reales, middlewares, transacciones `$transaction` y errores Prisma |
 | **End-to-End (regresión y abuso)** | — | Supertest + PostgreSQL Docker sobre `buildApp({ prisma })` | Ciclo de vida completo, rutas privadas por defecto y matriz OWASP en `tests/e2e/` (#22) |
 | **Arquitectura** | — | Vitest (análisis estático de imports) | Fronteras de las 4 capas (ADR-0003) en `tests/architecture/` |
+| **Humo de despliegue** | — | `npm run docker:smoke` (`scripts/smoke/compose-smoke.mjs`) | Imagen de producción y stack de dev en proyectos Compose aislados y efímeros (#24): `healthy`, `node`, `read_only`, `NODE_ENV=production`, 5 respuestas JSend y ADR-0006 (`HEALTHCHECK` sin base). No forma parte de `npm test` porque construye imágenes y requiere Docker |
 | **Aceptación / API** | 30 % | Thunder Client | `docs/thunder-client-collection.json` + `docs/thunder-client-environment.json` (#23): 13 endpoints y los códigos obligatorios, ejecutable con *Run All*. `tests/docs/thunder-client-collection.test.ts` valida su formato, su cobertura exacta del catálogo (`tests/support/route-catalog.ts`) y su higiene, y la **ejecuta** en orden contra la app real con el seed |
 
 ## 2. Convenciones de pruebas
@@ -30,7 +31,7 @@ Adoptamos el modelo **Testing Trophy** priorizando pruebas de integración HTTP 
   - Si la base de pruebas quedara inconsistente, por ejemplo al editar una migración ya aplicada: `DROP DATABASE recetaria_test`, y se recrea sola en la siguiente corrida.
 
 ## 3. Matriz de cobertura HTTP requerida
-Todo módulo (`Auth`, `Recipes`) debe contar con pruebas verificando:
+Todo módulo (`Auth`, `Recipes`, `Users`, `Health`) debe contar con pruebas de los códigos que le apliquen:
 
 | Código | Escenario obligatorio |
 |---|---|
@@ -62,4 +63,5 @@ Todas las respuestas de las suites E2E pasan por `createExposureRecorder` (`test
 npm test                 # Ejecuta pruebas unitarias, de integración, E2E y de arquitectura
 npx vitest run tests/e2e tests/architecture   # Solo las suites de regresión, abuso y fronteras (#22)
 npm run test:watch       # Modo observador durante desarrollo
+npm run docker:smoke     # Humo del despliegue en contenedores (prod + dev, aislado y efímero; requiere Docker)
 ```

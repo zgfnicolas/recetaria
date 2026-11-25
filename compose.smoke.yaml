@@ -1,0 +1,20 @@
+# Override SOLO para las pruebas de humo (`npm run docker:smoke`, #24), junto con compose.yaml.
+# Corre en un proyecto Compose aislado y efímero (recetaria-smoke-prod): nunca toca la base de desarrollo.
+# `name` propio: aun usado a mano sin `-p`, este override nunca apunta al proyecto `recetaria` ni a su volumen.
+name: recetaria-smoke
+
+services:
+  api:
+    # Producción no publica puertos (va detrás de un proxy); el humo la expone solo en loopback
+    ports:
+      - "127.0.0.1:${SMOKE_PORT:-3100}:3000"
+
+  migrate:
+    # Stack de prueba efímero: además de migrar, siembra los usuarios (la allowlist del seed admite test).
+    # En un despliegue productivo real el seed sigue bloqueado (NODE_ENV=production en la API).
+    environment:
+      NODE_ENV: test
+    command:
+      - sh
+      - -c
+      - ./node_modules/.bin/prisma migrate deploy && ./node_modules/.bin/tsx prisma/seed.ts
