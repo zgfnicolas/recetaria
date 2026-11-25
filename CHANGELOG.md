@@ -99,6 +99,7 @@ y este proyecto adhiere a [Versionado Semántico](https://semver.org/lang/es/).
 - Documento duplicado `docs/srs.md` y carpetas obsoletas `.ai/`, `.claude/`, `.cursor/`, `.devin/`.
 
 ### Corregido
+- **Seguridad: `verifyAccessToken` aceptaba un `iat` en el futuro (#22, hallazgo de la matriz OWASP):** un token firmado con `iat = ahora + N` y `exp = iat + 1h` cumplía `maxAge` y `exp - iat ≤ 1d`, y seguía vigente durante años si se filtraba `JWT_SECRET`, anulando el tope de #52. Ahora se rechaza un `iat` posterior a `ahora + JWT_CLOCK_TOLERANCE_SECONDS` (30 s, para tolerar el desfase de reloj), con `401` genérico. Pruebas unitarias con reloj fijo (bordes ±1 s) y una fila en la matriz E2E, con chequeo de mutación.
 - Prueba `resuelve el orden del catálogo y de /mine por índice, sin Sort (#36)` no determinista: usaba un `authorId` fijo compartido con otras suites que, tras un autoanalyze, quedaba como valor más común en `pg_stats` y llevaba al planner a otro índice; ahora usa un UUID aleatorio.
 - Renombrado de `agents.md` a `AGENTS.md` para que el import `@AGENTS.md` de `CLAUDE.md`, el puntero de `.github/copilot-instructions.md` y los enlaces relativos de `.agents/skills/*` resuelvan en sistemas de archivos sensibles a mayúsculas (Linux, CI, contenedores).
 

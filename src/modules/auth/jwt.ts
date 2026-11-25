@@ -14,6 +14,12 @@ import { USER_ROLES, type UserRole } from "./auth.schema.js";
 export const JWT_ALGORITHM = "HS256" as const;
 export const MIN_JWT_SECRET_LENGTH = 32;
 export const INVALID_TOKEN_MESSAGE = "Token inválido o expirado";
+/**
+ * Tolerancia de desfase de reloj para `iat` (#22): un token no puede declararse emitido más de
+ * estos segundos en el futuro. Sin este límite, `iat` futuro + `exp - iat ≤ 1d` dejaba vigente un
+ * token durante años (anulando el tope de #52) si se filtraba el secreto.
+ */
+export const JWT_CLOCK_TOLERANCE_SECONDS = 30;
 
 const DISALLOWED_TOKEN_CHARS_PATTERN = /[\s\u0000-\u001f\u007f-\u009f]/;
 
@@ -78,8 +84,10 @@ export function signAccessToken(actor: Actor, config: JwtConfig): string {
  * Verifica un Bearer JWT stateless exclusivamente con `algorithms: ["HS256"]`,
  * valida `{ id: UUID, role: Role }` con Zod 4 y retorna un `Actor` congelado (*fail closed*).
  * Defensa en profundidad del tope (#52): exige `iat` y `exp` numéricos, una antigüedad no mayor que
- * `MAX_JWT_EXPIRES_IN_SECONDS` (`maxAge`) y una vigencia declarada `exp - iat` dentro del tope, así
- * que ni un token sin `exp` ni uno con `exp` lejano (aun firmado con el secreto) son aceptados.
+ * `MAX_JWT_EXPIRES_IN_SECONDS` (`maxAge`), una vigencia declarada `exp - iat` dentro del tope y un
+ * `iat` no posterior a `ahora + JWT_CLOCK_TOLERANCE_SECONDS` (#22), así que ni un token sin `exp`
+ * ni uno con `exp` lejano (directo o vía `iat` futuro, aun firmado con el secreto) son aceptados:
+ * todo token aceptado vence, como máximo, en `ahora + 1d + tolerancia`.
  * Lanza `RangeError` si `secret` es inválido y `UnauthorizedError` ante cualquier fallo del token.
  */
 export function verifyAccessToken(token: string, secret: string): Actor {
@@ -103,7 +111,8 @@ export function verifyAccessToken(token: string, secret: string): Actor {
     typeof decoded !== "object" ||
     typeof decoded.iat !== "number" ||
     typeof decoded.exp !== "number" ||
-    decoded.exp - decoded.iat > MAX_JWT_EXPIRES_IN_SECONDS
+    decoded.exp - decoded.iat > MAX_JWT_EXPIRES_IN_SECONDS ||
+    decoded.iat > Math.floor(Date.now() / 1000) + JWT_CLOCK_TOLERANCE_SECONDS
   ) {
     throw new UnauthorizedError(INVALID_TOKEN_MESSAGE);
   }
