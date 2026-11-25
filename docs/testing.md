@@ -9,7 +9,7 @@ Adoptamos el modelo **Testing Trophy** priorizando pruebas de integración HTTP 
 | **Integración** | 50 % | Supertest + PostgreSQL Docker | Endpoints reales, middlewares, transacciones `$transaction` y errores Prisma |
 | **End-to-End (regresión y abuso)** | — | Supertest + PostgreSQL Docker sobre `buildApp({ prisma })` | Ciclo de vida completo, rutas privadas por defecto y matriz OWASP en `tests/e2e/` (#22) |
 | **Arquitectura** | — | Vitest (análisis estático de imports) | Fronteras de las 4 capas (ADR-0003) en `tests/architecture/` |
-| **Aceptación / API** | 30 % | Thunder Client | Colección exportada cubriendo casos felices y errores HTTP obligatorios |
+| **Aceptación / API** | 30 % | Thunder Client | `docs/thunder-client-collection.json` + `docs/thunder-client-environment.json` (#23): 13 endpoints y los códigos obligatorios, ejecutable con *Run All*. `tests/docs/thunder-client-collection.test.ts` valida su formato, su cobertura exacta del catálogo (`tests/support/route-catalog.ts`) y su higiene, y la **ejecuta** en orden contra la app real con el seed |
 
 ## 2. Convenciones de pruebas
 - **Ubicación:**

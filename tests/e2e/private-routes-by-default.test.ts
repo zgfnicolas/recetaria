@@ -8,29 +8,10 @@ import { buildApiRouters } from "../../src/bootstrap/container.js";
 import { disconnect, getDatabase, type Database } from "../../src/infrastructure/database/prisma.js";
 import { E2E_JWT_CONFIG } from "../support/e2e.js";
 import { createExposureRecorder } from "../support/exposure.js";
+import { ROUTE_CATALOG } from "../support/route-catalog.js";
 import { discoverRoutes, routeKey, type DiscoveredRoute } from "../support/route-discovery.js";
 
 const TEST_JWT_CONFIG = E2E_JWT_CONFIG;
-
-/**
- * Catálogo declarado de **todas** las rutas (#22). Una ruta nueva hace fallar la prueba de
- * completitud hasta que se clasifica aquí; el conjunto público es el de `docs/roles.md`.
- */
-const ROUTE_CATALOG: Readonly<Record<string, Readonly<{ public: boolean }>>> = {
-  "GET /health": { public: true },
-  "GET /health/ready": { public: true },
-  "POST /api/v1/auth/register": { public: true },
-  "POST /api/v1/auth/login": { public: true },
-  "GET /api/v1/recipes": { public: true },
-  "GET /api/v1/recipes/:id": { public: true },
-  "GET /api/v1/recipes/mine": { public: false },
-  "POST /api/v1/recipes": { public: false },
-  "PUT /api/v1/recipes/:id": { public: false },
-  "DELETE /api/v1/recipes/:id": { public: false },
-  "PUT /api/v1/recipes/:id/approve": { public: false },
-  "PATCH /api/v1/users/:id/role": { public: false },
-  "PATCH /api/v1/users/:id/status": { public: false },
-};
 
 const PRIVATE_ROUTES = Object.entries(ROUTE_CATALOG)
   .filter(([, entry]) => !entry.public)
