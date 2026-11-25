@@ -3,7 +3,13 @@ import type express from "express";
 import request from "supertest";
 import { expect } from "vitest";
 import type { Database } from "../../src/infrastructure/database/prisma.js";
-import { BCRYPT_SALT_ROUNDS, type UserRole } from "../../src/modules/auth/index.js";
+import type { ActorResolver } from "../../src/middlewares/auth.middleware.js";
+import {
+  AuthService,
+  BCRYPT_SALT_ROUNDS,
+  UserRepository,
+  type UserRole,
+} from "../../src/modules/auth/index.js";
 
 export const TEST_USER_PASSWORD = "test-password-example";
 
@@ -72,4 +78,13 @@ export async function registerAndLogin(
     await createUserWithRole(db, { email: options.email, role: options.role });
   }
   return loginAs(app, { email: options.email, password: TEST_USER_PASSWORD });
+}
+
+/**
+ * Resolvedor de actor real contra la base, para las apps de prueba que arman
+ * `createAuthMiddleware` a mano (#56, ADR-0009): mismo comportamiento que el contenedor.
+ */
+export function createDbActorResolver(db: Database): ActorResolver {
+  const authService = new AuthService(new UserRepository(db.prisma));
+  return (id) => authService.resolveActiveActor(id);
 }

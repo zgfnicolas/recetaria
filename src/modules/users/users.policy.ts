@@ -7,3 +7,11 @@ import type { Actor } from "../auth/index.js";
 export function canChangeRole(actor: Actor, targetUserId: string): boolean {
   return actor.id !== targetUserId;
 }
+
+/**
+ * Política pura (`RN-10`): un `ADMIN` no puede desactivar ni reactivar su propia cuenta (evita
+ * perder el acceso de moderación por error). El rol `ADMIN` lo exige RBAC.
+ */
+export function canChangeStatus(actor: Actor, targetUserId: string): boolean {
+  return actor.id !== targetUserId;
+}

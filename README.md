@@ -3,8 +3,8 @@
 API RESTful para publicar y consultar recetas gastronómicas validadas clínica y culinariamente por nutricionistas y chefs mediante control de acceso basado en roles (RBAC) y auditoría transaccional.
 
 ## Funcionalidades principales
-- Registro y autenticación stateless con Bcrypt (`>= 10` rounds) y JSON Web Tokens (JWT)
-- Gestión CRUD completa de recetas con validación estricta mediante Zod 4 (`z.strictObject`) y reglas de negocio explícitas en la capa de servicio (`RN-01`–`RN-08`)
+- Registro y autenticación con Bcrypt (`>= 10` rounds) y JSON Web Tokens (JWT) sin sesiones; la autorización usa el estado vigente del usuario (una cuenta desactivada o degradada pierde el acceso de inmediato, ADR-0009)
+- Gestión CRUD completa de recetas con validación estricta mediante Zod 4 (`z.strictObject`) y reglas de negocio explícitas en la capa de servicio (`RN-01`–`RN-10`)
 - Filtrado (`status`, `difficulty`, `authorId`), paginación acotada (`page`, `limit`) y consulta privada de recetas propias (`GET /api/v1/recipes/mine`)
 - Aprobación profesional exclusiva (`CHEF`, `NUTRITIONIST`) con bloqueo de auto-aprobación y auditoría atómica en `audit_logs` (`prisma.$transaction`)
 
@@ -47,7 +47,7 @@ JWT_EXPIRES_IN="1d"
 TRUST_PROXY=0
 ```
 
-`JWT_EXPIRES_IN` define la vigencia del token (por defecto `1d`). Como la autenticación es stateless y no hay revocación, **el máximo es `1d` (86 400 s)**: un valor mayor (`2d`, `1w`, `1y`, …) hace que la API no arranque y muestre `JWT_EXPIRES_IN no puede superar 1d (86400 s)` (#52). Se aceptan `15m`, `1h`, `12h`, `24h`, `1440m`, `86400s` o `1d`.
+`JWT_EXPIRES_IN` define la vigencia del token (por defecto `1d`). Como no hay refresh tokens, **el máximo es `1d` (86 400 s)**: un valor mayor (`2d`, `1w`, `1y`, …) hace que la API no arranque y muestre `JWT_EXPIRES_IN no puede superar 1d (86400 s)` (#52). Se aceptan `15m`, `1h`, `12h`, `24h`, `1440m`, `86400s` o `1d`.
 
 `TRUST_PROXY` indica en qué proxies confiar para leer la IP real del cliente desde `X-Forwarded-For` (la usa el rate limit del catálogo):
 - `0` o vacío (por defecto): la API recibe las conexiones directamente; `X-Forwarded-For` se ignora.
@@ -74,7 +74,8 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 | `PUT` | `/api/v1/recipes/:id` | Autor (`RN-02`) | Actualiza parcial o totalmente la receta propia (al menos 1 campo; solo cambia lo enviado; `null` vacía `nutritionalInfo`/`coverImageUrl`/`videoUrl`; `title` regenera el `slug`); si estaba `APPROVED`, reinicia a `DRAFT` con registro `RESET_TO_DRAFT` en `audit_logs` | `200`, `400`, `401`, `403`, `404`, `409` |
 | `DELETE` | `/api/v1/recipes/:id` | Autor o `ADMIN` (`RN-03`) | Elimina físicamente la receta dentro de `$transaction` registrando `DELETE` con snapshot `{ title, authorId, status }` en `audit_logs` (sobrevive al borrado); responde `data: { id }` | `200`, `400`, `401`, `403`, `404` |
 | `PUT` | `/api/v1/recipes/:id/approve` | `CHEF` o `NUTRITIONIST` ≠ Autor (`RN-04`, `RN-05`) | Aprueba receta `DRAFT → APPROVED` dentro de `$transaction` registrando `APPROVE` en `audit_logs`; **exige `If-Match`** con el `ETag` de la versión revisada (de `GET /:id`) | `200`, `400`, `401`, `403`, `404`, `409`, `412`, `428` |
-| `PATCH` | `/api/v1/users/:id/role` | `ADMIN` (`RN-09`) | Cambia el rol de otro usuario (`{ role }`), revalidando al actor en la base, nunca el propio y sin dejar el sistema sin `ADMIN`; registra `ROLE_CHANGED` en `audit_logs` (ADR-0008). El rol nuevo rige desde el próximo login | `200`, `400`, `401`, `403`, `404`, `409` |
+| `PATCH` | `/api/v1/users/:id/role` | `ADMIN` (`RN-09`) | Cambia el rol de otro usuario (`{ role }`), revalidando al actor en la base, nunca el propio y sin dejar el sistema sin `ADMIN`; registra `ROLE_CHANGED` en `audit_logs` (ADR-0008). El rol nuevo rige de inmediato (ADR-0009) | `200`, `400`, `401`, `403`, `404`, `409` |
+| `PATCH` | `/api/v1/users/:id/status` | `ADMIN` (`RN-10`) | Activa o desactiva la cuenta de otro usuario (`{ isActive }`), nunca la propia ni al último `ADMIN` activo; registra `ACCOUNT_ACTIVATED`/`ACCOUNT_DEACTIVATED` en `audit_logs`. Desactivar corta de inmediato todas sus rutas protegidas | `200`, `400`, `401`, `403`, `404`, `409` |
 
 ## Extras opcionales implementados
 - **Filtros con `req.query`:** `GET /api/v1/recipes?status=APPROVED&difficulty=EASY&authorId=<uuid>&page=1&limit=20`.

@@ -1,7 +1,7 @@
 import type { Actor, UserRole } from "../auth/index.js";
 import { ConflictError, ForbiddenError, NotFoundError } from "../../shared/errors/app-error.js";
-import { canChangeRole } from "./users.policy.js";
-import type { IUserAdminRepository, ManagedUser } from "./users.repository.js";
+import { canChangeRole, canChangeStatus } from "./users.policy.js";
+import type { IUserAdminRepository, ManagedUser, UserAdminResult } from "./users.repository.js";
 
 export const USER_NOT_FOUND_MESSAGE = "Usuario no encontrado";
 export const SELF_ROLE_CHANGE_FORBIDDEN_MESSAGE = "Un administrador no puede cambiar su propio rol";
@@ -9,9 +9,14 @@ export const ACTOR_NOT_ACTIVE_ADMIN_MESSAGE =
   "Tu cuenta ya no es un administrador activo; vuelve a iniciar sesión";
 export const LAST_ADMIN_CONFLICT_MESSAGE =
   "No se puede quitar el rol al último administrador activo";
+export const SELF_STATUS_CHANGE_FORBIDDEN_MESSAGE =
+  "Un administrador no puede cambiar el estado de su propia cuenta";
+export const LAST_ADMIN_DEACTIVATION_CONFLICT_MESSAGE =
+  "No se puede desactivar al último administrador activo";
 
 export interface IUserAdminService {
   changeRole(actor: Actor, targetUserId: string, role: UserRole): Promise<ManagedUser>;
+  changeStatus(actor: Actor, targetUserId: string, isActive: boolean): Promise<ManagedUser>;
 }
 
 /**
@@ -38,16 +43,39 @@ export class UserAdminService implements IUserAdminService {
       targetUserId,
       role,
     });
-    switch (result.outcome) {
-      case "changed":
-      case "unchanged":
-        return result.user;
-      case "not_found":
-        throw new NotFoundError(USER_NOT_FOUND_MESSAGE);
-      case "actor_not_admin":
-        throw new ForbiddenError(ACTOR_NOT_ACTIVE_ADMIN_MESSAGE);
-      case "last_admin":
-        throw new ConflictError(LAST_ADMIN_CONFLICT_MESSAGE);
+    return unwrap(result, LAST_ADMIN_CONFLICT_MESSAGE);
+  }
+
+  /**
+   * Activación y desactivación de cuentas (`RN-10`, #56), con el mismo orden de guardas que
+   * `changeRole`: `403` auto-modificación → `403` actor no activo → `404` → `409` último `ADMIN`.
+   * Desactivar rige de inmediato en toda la API, porque `authMiddleware` resuelve el estado vigente
+   * (ADR-0009).
+   */
+  async changeStatus(actor: Actor, targetUserId: string, isActive: boolean): Promise<ManagedUser> {
+    if (!canChangeStatus(actor, targetUserId)) {
+      throw new ForbiddenError(SELF_STATUS_CHANGE_FORBIDDEN_MESSAGE);
     }
+    const result = await this.#repository.changeStatusWithAudit({
+      actorId: actor.id,
+      targetUserId,
+      isActive,
+    });
+    return unwrap(result, LAST_ADMIN_DEACTIVATION_CONFLICT_MESSAGE);
+  }
+}
+
+/** Traduce el resultado del repositorio al usuario devuelto o al error HTTP correspondiente. */
+function unwrap(result: UserAdminResult, lastAdminMessage: string): ManagedUser {
+  switch (result.outcome) {
+    case "changed":
+    case "unchanged":
+      return result.user;
+    case "not_found":
+      throw new NotFoundError(USER_NOT_FOUND_MESSAGE);
+    case "actor_not_admin":
+      throw new ForbiddenError(ACTOR_NOT_ACTIVE_ADMIN_MESSAGE);
+    case "last_admin":
+      throw new ConflictError(lastAdminMessage);
   }
 }

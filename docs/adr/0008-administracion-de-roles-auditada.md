@@ -1,7 +1,7 @@
 # 8. Administración de roles auditada
 
 Fecha: 2026-11-24
-Estado: Aceptada (implementa la opción C diferida en ADR-0007 y extiende la convención de `audit_logs` de ADR-0006)
+Estado: Aceptada (implementa la opción C diferida en ADR-0007 y extiende la convención de `audit_logs` de ADR-0006; desde [ADR-0009](0009-autorizacion-con-estado-vigente-del-actor.md) el rol nuevo rige de inmediato en toda la API, no desde el próximo login)
 
 ## Contexto
 Desde ADR-0007 (#48), `POST /api/v1/auth/register` crea siempre `USER`, y **no había ningún camino en la API para otorgar o revocar `CHEF`, `NUTRITIONIST` o `ADMIN`**. Fuera de `development|test` (donde corre el seed) solo quedaba el SQL manual sobre `users`, sin control de acceso de la aplicación ni trazabilidad en `audit_logs`. #53 decidió incluir el endpoint en el MVP.

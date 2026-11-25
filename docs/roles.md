@@ -24,10 +24,11 @@
 | Eliminar cualquier receta (`DELETE /api/v1/recipes/:id`) | ✓ | | | | |
 | Aprobar receta de terceros (`PUT /api/v1/recipes/:id/approve`) | | ✓ | ✓ | | |
 | Cambiar el rol de otro usuario (`PATCH /api/v1/users/:id/role`) | ✓ | | | | |
+| Activar o desactivar la cuenta de otro usuario (`PATCH /api/v1/users/:id/status`) | ✓ | | | | |
 
 ## Reglas especiales
 - **Visibilidad y paginación en lecturas públicas (`GET /api/v1/recipes` y `GET /api/v1/recipes/:id`):** por defecto devuelven recetas `DRAFT` y `APPROVED` ordenadas por `createdAt DESC, id DESC`, paginadas con `?page=1&limit=20` (`limit` máximo `100` y ventana `page × limit` ≤ `10000`; parámetros desconocidos, vacíos o repetidos → `400`) y filtros opcionales `?status=`, `?difficulty=` y `?authorId=`.
-- **Cuentas inactivas (`isActive = false`):** `POST /api/v1/auth/login` rechaza el inicio de sesión con `401 Unauthorized` genérico (`RN-08`); `authMiddleware` se mantiene 100 % stateless en el MVP.
+- **Cuentas inactivas (`isActive = false`):** `POST /api/v1/auth/login` rechaza el inicio de sesión y, además, **toda** ruta protegida responde `401 Unauthorized` genérico aunque el JWT siga vigente, porque `authMiddleware` resuelve el estado vigente del actor (`RN-08`, ADR-0009). Un usuario degradado opera de inmediato con su rol nuevo. Solo un `ADMIN` activa o desactiva cuentas (`RN-10`).
 - **Propiedad exclusiva en edición (`RN-02`):** ningún usuario (ni siquiera `ADMIN`) puede editar una receta cuyo `authorId` no coincida con su `req.user.id`.
 - **Permiso de borrado (`RN-03`):** únicamente el autor original (`recipe.authorId === req.user.id`) o un usuario con rol `ADMIN` pueden eliminar una receta.
 - **Administración de roles (`RN-09`):** solo un `ADMIN` activo (revalidado en la base) cambia roles ajenos, nunca el propio, y el sistema nunca queda sin `ADMIN` activo. Cada cambio se audita como `ROLE_CHANGED`.

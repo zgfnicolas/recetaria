@@ -22,7 +22,7 @@ import {
 } from "../../../src/middlewares/validate.middleware.js";
 import { INVALID_TOKEN_MESSAGE, type JwtConfig } from "../../../src/modules/auth/index.js";
 import { sendSuccess } from "../../../src/shared/http/jsend.js";
-import { registerAndLogin } from "../../support/users.js";
+import { createDbActorResolver, registerAndLogin } from "../../support/users.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const UUID_V4_PATTERN =
@@ -145,7 +145,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
       const onError = vi.fn();
       const app = createGuardsTestApp({
         db,
-        authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret }),
+        authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret, resolveActor: createDbActorResolver(db) }),
         onLog: (line) => logs.push(line),
         onError,
       });
@@ -187,7 +187,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
     const onError = vi.fn();
     const app = createGuardsTestApp({
       db,
-      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret }),
+      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret, resolveActor: createDbActorResolver(db) }),
       onLog: vi.fn(),
       onError,
     });
@@ -250,7 +250,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
     const onError = vi.fn();
     const app = createGuardsTestApp({
       db,
-      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret }),
+      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret, resolveActor: createDbActorResolver(db) }),
       onLog: vi.fn(),
       onError,
     });
@@ -309,7 +309,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
     const onError = vi.fn();
     const app = createGuardsTestApp({
       db,
-      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret }),
+      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret, resolveActor: createDbActorResolver(db) }),
       onLog: vi.fn(),
       onError,
     });
@@ -380,7 +380,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
     const onError = vi.fn();
     const app = createGuardsTestApp({
       db,
-      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret }),
+      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret, resolveActor: createDbActorResolver(db) }),
       onLog: (line) => logs.push(line),
       onError,
     });
@@ -547,11 +547,11 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
     }
   });
 
-  it("opera 100 % stateless sin consultar DB aunque el usuario pase a isActive = false tras el login (ADR-0004, ADR-0005, RN-08)", async () => {
+  it("aplica el estado vigente: un usuario desactivado tras el login pierde el acceso de inmediato (ADR-0009, #56)", async () => {
     // Arrange
     const app = createGuardsTestApp({
       db,
-      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret }),
+      authGuard: createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret, resolveActor: createDbActorResolver(db) }),
       onLog: vi.fn(),
       onError: vi.fn(),
     });
@@ -574,9 +574,9 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
       password: "test-password-example",
     });
 
-    // Assert
-    expect(protectedRes.status).toBe(200);
-    expect(protectedRes.body.data.user).toEqual({ id: userId, role: "CHEF" });
+    // Assert — el JWT sigue firmado y vigente, pero la base ya no autoriza (antes: 200 stateless)
+    expect(protectedRes.status).toBe(401);
+    expect(protectedRes.body).toMatchObject({ success: false, message: INVALID_TOKEN_MESSAGE });
     expect(reLoginRes.status).toBe(401);
     expect(reLoginRes.body.message).toBe("Credenciales inválidas");
   });
@@ -586,7 +586,7 @@ describe("Guardas transversales authMiddleware y rbacMiddleware — Integración
     const onError = vi.fn();
     const failClosedApp = createGuardsTestApp({
       db,
-      authGuard: createAuthMiddleware(),
+      authGuard: createAuthMiddleware({ resolveActor: createDbActorResolver(db) }),
       onLog: vi.fn(),
       onError,
     });

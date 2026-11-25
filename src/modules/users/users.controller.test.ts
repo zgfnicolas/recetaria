@@ -25,6 +25,7 @@ function createHarness(options: {
     next();
   });
   app.patch("/users/:id/role", controller.changeRole);
+  app.patch("/users/:id/status", controller.changeStatus);
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     nextErrors.push(err);
     const statusCode =
@@ -39,11 +40,15 @@ function createHarness(options: {
 function createMockService(): {
   readonly service: IUserAdminService;
   readonly changeRole: ReturnType<typeof vi.fn<IUserAdminService["changeRole"]>>;
+  readonly changeStatus: ReturnType<typeof vi.fn<IUserAdminService["changeStatus"]>>;
 } {
   const changeRole = vi
     .fn<IUserAdminService["changeRole"]>()
-    .mockResolvedValue({ id: TARGET_ID, email: "destino@recetaria.com", role: "CHEF" });
-  return { service: { changeRole }, changeRole };
+    .mockResolvedValue({ id: TARGET_ID, email: "destino@recetaria.com", role: "CHEF", isActive: true });
+  const changeStatus = vi
+    .fn<IUserAdminService["changeStatus"]>()
+    .mockResolvedValue({ id: TARGET_ID, email: "destino@recetaria.com", role: "USER", isActive: false });
+  return { service: { changeRole, changeStatus }, changeRole, changeStatus };
 }
 
 describe("UserAdminController.changeRole", () => {
@@ -63,7 +68,7 @@ describe("UserAdminController.changeRole", () => {
       success: true,
       statusCode: 200,
       message: "Rol actualizado exitosamente",
-      data: { id: TARGET_ID, email: "destino@recetaria.com", role: "CHEF" },
+      data: { id: TARGET_ID, email: "destino@recetaria.com", role: "CHEF", isActive: true },
     });
   });
 
@@ -114,4 +119,50 @@ describe("UserAdminController.changeRole", () => {
       expect(nextErrors).toEqual([failure]);
     },
   );
+});
+
+describe("UserAdminController.changeStatus", () => {
+  it.each([
+    [false, "Cuenta desactivada exitosamente"],
+    [true, "Cuenta activada exitosamente"],
+  ])("con isActive = %s usa req.valid y responde 200 JSend con %s", async (isActive, message) => {
+    // Arrange
+    const { service, changeStatus } = createMockService();
+    changeStatus.mockResolvedValueOnce({ id: TARGET_ID, email: "destino@recetaria.com", role: "USER", isActive });
+    const { app, nextErrors } = createHarness({
+      service,
+      user: ADMIN,
+      valid: { params: { id: TARGET_ID }, body: { isActive } },
+    });
+
+    // Act
+    const res = await request(app).patch("/users/no-es-el-id/status").send({ isActive: !isActive, role: "ADMIN" });
+
+    // Assert
+    expect(nextErrors).toEqual([]);
+    expect(changeStatus).toHaveBeenCalledWith(ADMIN, TARGET_ID, isActive);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      success: true,
+      statusCode: 200,
+      message,
+      data: { id: TARGET_ID, email: "destino@recetaria.com", role: "USER", isActive },
+    });
+  });
+
+  it("falla cerrado con 401 sin req.user y con 400 sin req.valid", async () => {
+    // Arrange
+    const { service, changeStatus } = createMockService();
+    const noUser = createHarness({ service, valid: { params: { id: TARGET_ID }, body: { isActive: false } } });
+    const noValid = createHarness({ service, user: ADMIN });
+
+    // Act
+    const unauthorized = await request(noUser.app).patch(`/users/${TARGET_ID}/status`);
+    const invalid = await request(noValid.app).patch(`/users/${TARGET_ID}/status`);
+
+    // Assert
+    expect(unauthorized.status).toBe(401);
+    expect(invalid.status).toBe(400);
+    expect(changeStatus).not.toHaveBeenCalled();
+  });
 });

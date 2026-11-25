@@ -7,11 +7,12 @@ import {
   MIN_JWT_SECRET_LENGTH,
   signAccessToken,
   type Actor,
+  type UserRole,
 } from "../modules/auth/index.js";
 import { AppError, UnauthorizedError } from "../shared/errors/app-error.js";
 import {
-  authMiddleware,
   createAuthMiddleware,
+  type ActorResolver,
   extractBearerToken,
   type AuthenticatedRequest,
 } from "./auth.middleware.js";
@@ -20,6 +21,16 @@ const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const TEST_JWT_SECRET = "test-jwt-secret-".repeat(3);
 const OTHER_JWT_SECRET = "other-jwt-secret-".repeat(3);
 const VALID_UUID = "33333333-3333-4333-8333-333333333333";
+
+/** Resolvedor que simula un usuario activo con `role` vigente en la base (#56, ADR-0009). */
+function activeAs(role: UserRole): ActorResolver {
+  return (id) => Promise.resolve({ id, role });
+}
+
+/** Resolvedor que nunca debería invocarse (token inválido, header ausente o sin secreto). */
+function neverResolve(): ReturnType<typeof vi.fn<ActorResolver>> {
+  return vi.fn<ActorResolver>().mockRejectedValue(new Error("resolveActor no debía llamarse"));
+}
 
 function toBase64Url(value: unknown): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
@@ -123,7 +134,9 @@ describe("createAuthMiddleware", () => {
     const invalidSecret = secret;
 
     // Act & Assert
-    expect(() => createAuthMiddleware({ secret: invalidSecret })).toThrow(RangeError);
+    expect(() => createAuthMiddleware({ secret: invalidSecret, resolveActor: neverResolve() })).toThrow(
+      RangeError,
+    );
   });
 
   it.each([
@@ -138,7 +151,7 @@ describe("createAuthMiddleware", () => {
         { secret: TEST_JWT_SECRET, expiresIn: "1h" },
       );
       const harness = createAuthTestHarness({
-        middleware: createAuthMiddleware(),
+        middleware: createAuthMiddleware({ resolveActor: neverResolve() }),
         preAssignedUser: { id: VALID_UUID, role: "ADMIN" },
       });
 
@@ -171,7 +184,7 @@ describe("createAuthMiddleware", () => {
         { secret: TEST_JWT_SECRET, expiresIn: "1h" },
       );
       const harness = createAuthTestHarness({
-        middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET }),
+        middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET, resolveActor: activeAs(role) }),
       });
 
       // Act
@@ -199,8 +212,9 @@ describe("createAuthMiddleware", () => {
     "rechaza con UnauthorizedError 401 y limpia req.user previo ante $label",
     async ({ header }) => {
       // Arrange
+      const resolveActor = neverResolve();
       const harness = createAuthTestHarness({
-        middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET }),
+        middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET, resolveActor }),
         preAssignedUser: { id: VALID_UUID, role: "ADMIN" },
       });
 
@@ -219,6 +233,7 @@ describe("createAuthMiddleware", () => {
         expect(passedError.message).toBe("Token de autenticación requerido");
         expect(passedError.errors).toBeUndefined();
       }
+      expect(resolveActor).not.toHaveBeenCalled();
     },
   );
 
@@ -275,8 +290,9 @@ describe("createAuthMiddleware", () => {
     async ({ buildToken }) => {
       // Arrange
       const badToken = buildToken();
+      const resolveActor = neverResolve();
       const harness = createAuthTestHarness({
-        middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET }),
+        middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET, resolveActor }),
         preAssignedUser: { id: VALID_UUID, role: "ADMIN" },
       });
 
@@ -296,70 +312,78 @@ describe("createAuthMiddleware", () => {
         expect(passedError.message).toBe(INVALID_TOKEN_MESSAGE);
         expect(passedError.errors).toBeUndefined();
       }
+      expect(resolveActor).not.toHaveBeenCalled();
     },
   );
 });
 
-describe("authMiddleware (por defecto sobre JWT_SECRET de entorno)", () => {
-  it("autentica y adjunta req.user congelado cuando JWT_SECRET de entorno es válido", async () => {
-    // Arrange
-    vi.stubEnv("JWT_SECRET", TEST_JWT_SECRET);
-    const token = signAccessToken(
-      { id: VALID_UUID, role: "CHEF" },
-      { secret: TEST_JWT_SECRET, expiresIn: "1h" },
-    );
+describe("createAuthMiddleware — estado vigente del actor en la base (#56, ADR-0009)", () => {
+  function tokenFor(role: UserRole): string {
+    return signAccessToken({ id: VALID_UUID, role }, { secret: TEST_JWT_SECRET, expiresIn: "1h" });
+  }
+
+  it("impone el rol de la base aunque el token declare otro (un degradado opera con su rol nuevo)", async () => {
+    // Arrange — el token dice ADMIN; la base dice USER
+    const resolveActor = vi.fn<ActorResolver>(activeAs("USER"));
     const harness = createAuthTestHarness({
-      middleware: authMiddleware,
+      middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET, resolveActor }),
     });
 
     // Act
-    const res = await request(harness.app)
-      .get("/protected")
-      .set("Authorization", `Bearer ${token}`);
+    const res = await request(harness.app).get("/protected").set("Authorization", `Bearer ${tokenFor("ADMIN")}`);
 
     // Assert
     expect(res.status).toBe(200);
-    expect(harness.nextErrors).toHaveLength(0);
-    expect(res.body).toEqual({
-      user: { id: VALID_UUID, role: "CHEF" },
-      isFrozen: true,
-    });
+    expect(res.body).toEqual({ user: { id: VALID_UUID, role: "USER" }, isFrozen: true });
+    expect(resolveActor).toHaveBeenCalledWith(VALID_UUID);
   });
 
-  it.each<{ readonly label: string; readonly secretValue: string | undefined }>([
-    { label: "ausente (undefined)", secretValue: undefined },
-    { label: "vacío", secretValue: "" },
-    { label: "solo espacios", secretValue: " ".repeat(40) },
-    { label: "corto (< 32 chars)", secretValue: "short-secret" },
-  ])(
-    "falla cerrado con AppError 500 no operacional si JWT_SECRET de entorno es $label",
-    async ({ secretValue }) => {
-      // Arrange
-      vi.stubEnv("JWT_SECRET", secretValue);
-      if (secretValue === undefined) {
-        expect(process.env["JWT_SECRET"]).toBeUndefined();
-      }
-      const harness = createAuthTestHarness({
-        middleware: authMiddleware,
-        preAssignedUser: { id: VALID_UUID, role: "ADMIN" },
-      });
+  it("responde 401 con el mensaje genérico de token inválido si el actor no existe o está inactivo", async () => {
+    // Arrange
+    const harness = createAuthTestHarness({
+      middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET, resolveActor: () => Promise.resolve(null) }),
+      preAssignedUser: { id: VALID_UUID, role: "ADMIN" },
+    });
 
-      // Act
-      const res = await request(harness.app)
-        .get("/protected")
-        .set("Authorization", "Bearer a.b.c");
+    // Act
+    const res = await request(harness.app).get("/protected").set("Authorization", `Bearer ${tokenFor("CHEF")}`);
 
-      // Assert
-      expect(res.status).toBe(500);
-      expect(harness.getCapturedUserOnError()).toBeUndefined();
-      expect(harness.nextErrors).toHaveLength(1);
-      const passedError = harness.nextErrors[0];
-      expect(passedError).toBeInstanceOf(AppError);
-      if (passedError instanceof AppError) {
-        expect(passedError.statusCode).toBe(500);
-        expect(passedError.isOperational).toBe(false);
-        expect(passedError.message).toBe("Configuración JWT no inicializada");
-      }
-    },
-  );
+    // Assert — no revela si la cuenta existe o está suspendida
+    expect(res.status).toBe(401);
+    expect(harness.getCapturedUserOnError()).toBeUndefined();
+    expect(harness.nextErrors[0]).toBeInstanceOf(UnauthorizedError);
+    expect(harness.nextErrors[0]).toMatchObject({ message: INVALID_TOKEN_MESSAGE });
+  });
+
+  it("responde 401 si el resolvedor devuelve un actor con otro id (fail closed)", async () => {
+    // Arrange
+    const harness = createAuthTestHarness({
+      middleware: createAuthMiddleware({
+        secret: TEST_JWT_SECRET,
+        resolveActor: () => Promise.resolve({ id: "44444444-4444-4444-8444-444444444444", role: "ADMIN" }),
+      }),
+    });
+
+    // Act
+    const res = await request(harness.app).get("/protected").set("Authorization", `Bearer ${tokenFor("USER")}`);
+
+    // Assert
+    expect(res.status).toBe(401);
+  });
+
+  it("propaga un fallo de la base a next(err) sin convertirlo en 401", async () => {
+    // Arrange
+    const failure = new Error("PostgreSQL no disponible");
+    const harness = createAuthTestHarness({
+      middleware: createAuthMiddleware({ secret: TEST_JWT_SECRET, resolveActor: () => Promise.reject(failure) }),
+    });
+
+    // Act
+    const res = await request(harness.app).get("/protected").set("Authorization", `Bearer ${tokenFor("USER")}`);
+
+    // Assert
+    expect(res.status).toBe(500);
+    expect(harness.nextErrors).toEqual([failure]);
+    expect(harness.getCapturedUserOnError()).toBeUndefined();
+  });
 });

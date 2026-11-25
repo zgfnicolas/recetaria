@@ -11,7 +11,6 @@ import {
 } from "../../../src/infrastructure/database/prisma.js";
 import { DUMMY_BCRYPT_HASH, type JwtConfig, type UserRole } from "../../../src/modules/auth/index.js";
 import {
-  INVALID_AUTHOR_MESSAGE,
   RECIPE_DELETE_FORBIDDEN_MESSAGE,
   RECIPE_NOT_FOUND_MESSAGE,
 } from "../../../src/modules/recipes/index.js";
@@ -296,13 +295,13 @@ describe("DELETE /api/v1/recipes/:id — Eliminación física autorizada (Integr
       expect(res.status).toBe(401);
     });
 
-    it("responde 401 si un ADMIN con JWT válido ya no existe en users (P2003), sin borrar", async () => {
+    it("responde 401 si un ADMIN con JWT válido ya no existe en users (authMiddleware, ADR-0009), sin borrar", async () => {
       // Act
       const res = await del(APPROVED_ID, { id: randomUUID(), role: "ADMIN" });
 
       // Assert
       expect(res.status).toBe(401);
-      expect(res.body).toMatchObject({ success: false, message: INVALID_AUTHOR_MESSAGE });
+      expect(res.body).toMatchObject({ success: false, message: "Token inválido o expirado" });
       await expectIntact(APPROVED_ID);
     });
   });

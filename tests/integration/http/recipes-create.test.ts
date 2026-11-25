@@ -18,7 +18,7 @@ import {
   RecipeRepository,
   RecipeService,
 } from "../../../src/modules/recipes/index.js";
-import { registerAndLogin } from "../../support/users.js";
+import { createDbActorResolver, registerAndLogin } from "../../support/users.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{8}$/;
@@ -238,7 +238,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
       expect(await db.prisma.recipe.count()).toBe(0);
     });
 
-    it("rechaza un JWT válido cuyo usuario no existe en la base (P2003) sin 500", async () => {
+    it("rechaza un JWT válido cuyo usuario no existe en la base: 401 en authMiddleware, sin 500 (ADR-0009)", async () => {
       // Arrange
       const onError = vi.fn();
       const app = createApp(db, { onError });
@@ -258,7 +258,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
       expect(res.body).toEqual({
         success: false,
         statusCode: 401,
-        message: "Usuario autenticado no válido",
+        message: "Token inválido o expirado",
         errors: [],
       });
       expect(onError).not.toHaveBeenCalled();
@@ -504,7 +504,7 @@ describe("POST /api/v1/recipes — Alta de Receta en Borrador (Integración HTTP
   describe("409 Conflict y 500 fail-closed", () => {
     it("devuelve 409 ante colisión real de slug (P2002) y conserva solo la primera fila", async () => {
       // Arrange: slug determinístico inyectado en el servicio para forzar la colisión
-      const authGuard = createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret });
+      const authGuard = createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret, resolveActor: createDbActorResolver(db) });
       const service = new RecipeService(new RecipeRepository(db.prisma), {
         generateSlug: () => "slug-fijo-0a1b2c3d",
       });

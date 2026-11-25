@@ -14,7 +14,7 @@ La referencia de campos sensibles vive en [`data_model.md`](data_model.md#datos-
 | Categoría | Datos | Base legal / Tratamiento |
 |---|---|---|
 | Identificación básica | `email`, `firstName`, `lastName`, `id` (UUID) | Ejecución del servicio y consentimiento al registrarse |
-| Credenciales | `passwordHash`, tokens JWT stateless | Hash unidireccional Bcrypt (`>= 10` rounds); jamás incluidos en respuestas o logs |
+| Credenciales | `passwordHash`, tokens JWT (sin sesiones; la autorización consulta el estado vigente del usuario, ADR-0009) | Hash unidireccional Bcrypt (`>= 10` rounds); jamás incluidos en respuestas o logs |
 | Salud implícita (dato sensible) | Etiquetas dietarias (`tags`) y `nutritionalInfo` en recetas | Validación estricta Zod; aprobación restringida a perfiles `CHEF` / `NUTRITIONIST` |
 | Auditoría | `audit_logs` (`entityId`, `action`, `userId`) | Trazabilidad e integridad operativa del catálogo |
 

@@ -28,10 +28,6 @@ declare global {
   }
 }
 
-export type AuthMiddlewareOptions = Readonly<{
-  secret?: string | undefined;
-}>;
-
 /**
  * Extrae el token del encabezado `Authorization` exigiendo prefijo estricto `Bearer `
  * (sensible a mayúsculas) y rechazando tokens vacíos, espacios o caracteres de control.
@@ -51,7 +47,24 @@ export function extractBearerToken(
   return token;
 }
 
-function authenticateWithSecret(req: Request, next: NextFunction, secret: string): void {
+/**
+ * Resuelve el actor de un JWT ya verificado contra su estado **vigente** (#56, ADR-0009): debe
+ * devolver `{ id, role }` con el rol actual de la base, o `null` si no existe o está inactivo.
+ * Lo implementa `AuthService.resolveActiveActor` (el middleware no accede a Prisma, 4 capas).
+ */
+export type ActorResolver = (id: string) => Promise<Actor | null>;
+
+export type AuthMiddlewareOptions = Readonly<{
+  secret?: string | undefined;
+  resolveActor: ActorResolver;
+}>;
+
+async function authenticate(
+  req: Request,
+  next: NextFunction,
+  secret: string,
+  resolveActor: ActorResolver,
+): Promise<void> {
   delete req.user;
 
   const token = extractBearerToken(req.headers.authorization);
@@ -60,68 +73,53 @@ function authenticateWithSecret(req: Request, next: NextFunction, secret: string
     return;
   }
 
-  let actor: Actor;
+  let claims: Actor;
   try {
-    actor = verifyAccessToken(token, secret);
+    claims = verifyAccessToken(token, secret);
   } catch (err: unknown) {
-    delete req.user;
-    if (err instanceof UnauthorizedError) {
-      next(err);
-      return;
-    }
+    next(err instanceof UnauthorizedError ? err : new UnauthorizedError(INVALID_TOKEN_MESSAGE));
+    return;
+  }
+
+  // El JWT identifica; la base autoriza con el estado vigente (ADR-0009). Un fallo de la base se
+  // propaga (5xx redactado), nunca se convierte en 401.
+  let current: Actor | null;
+  try {
+    current = await resolveActor(claims.id);
+  } catch (err: unknown) {
+    next(err);
+    return;
+  }
+  if (current === null || current.id !== claims.id) {
+    // Mismo mensaje que un token inválido: no revela si la cuenta existe o está desactivada.
     next(new UnauthorizedError(INVALID_TOKEN_MESSAGE));
     return;
   }
 
-  req.user = actor;
+  req.user = Object.freeze({ id: current.id, role: current.role });
   next();
 }
 
-function readValidEnvJwtSecret(): string | null {
-  const candidate = process.env["JWT_SECRET"];
-  if (typeof candidate !== "string") {
-    return null;
-  }
-  try {
-    assertValidJwtSecret(candidate);
-    return candidate;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Construye un middleware de autenticación JWT stateless (`HS256`, *fail closed*) con DI explícita.
+ * Construye el middleware de autenticación (`HS256`, *fail closed*) con DI explícita: verifica la
+ * firma y vigencia del JWT y luego resuelve al actor con `resolveActor`, imponiendo su **rol y
+ * estado actuales** (un desactivado o inexistente → `401`; un degradado opera con su rol nuevo).
  * Valida `secret` en construcción si se provee; si se omite, falla cerrado con `500` no operacional.
  */
-export function createAuthMiddleware(options?: AuthMiddlewareOptions): RequestHandler {
-  const secret = options?.secret;
+export function createAuthMiddleware(options: AuthMiddlewareOptions): RequestHandler {
+  const secret = options.secret;
   if (secret !== undefined) {
     assertValidJwtSecret(secret);
   }
+  const { resolveActor } = options;
 
-  return (req, _res, next) => {
+  return async (req, _res, next) => {
     if (secret === undefined) {
       delete req.user;
       next(new AppError(500, MISSING_JWT_CONFIG_MESSAGE, { isOperational: false }));
       return;
     }
 
-    authenticateWithSecret(req, next, secret);
+    await authenticate(req, next, secret, resolveActor);
   };
 }
-
-/**
- * Middleware de autenticación JWT stateless por defecto sobre `process.env["JWT_SECRET"]` (*fail closed*).
- * En composición explícita (`bootstrap/container.ts`, pruebas) preferir `createAuthMiddleware({ secret })`.
- */
-export const authMiddleware: RequestHandler = (req, _res, next) => {
-  const secret = readValidEnvJwtSecret();
-  if (secret === null) {
-    delete req.user;
-    next(new AppError(500, MISSING_JWT_CONFIG_MESSAGE, { isOperational: false }));
-    return;
-  }
-
-  authenticateWithSecret(req, next, secret);
-};

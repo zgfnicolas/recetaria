@@ -111,7 +111,11 @@ export function buildApiRouters(
   const authRouter = createAuthRouter(authController, { loginLimiters, registerLimiter });
 
   // Guarda JWT con DI explícita: sin `jwt` falla cerrado (500 redactado) en cada request protegida.
-  const authGuard = createAuthMiddleware({ secret: options?.jwt?.secret });
+  // El JWT identifica; la base autoriza con el estado vigente del actor (#56, ADR-0009).
+  const authGuard = createAuthMiddleware({
+    secret: options?.jwt?.secret,
+    resolveActor: (id) => authService.resolveActiveActor(id),
+  });
 
   const recipeRepository = new RecipeRepository(prisma);
   const recipeService = new RecipeService(recipeRepository);

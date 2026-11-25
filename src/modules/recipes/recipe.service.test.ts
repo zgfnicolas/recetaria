@@ -7,7 +7,9 @@ import {
   ForbiddenError,
   NotFoundError,
   PreconditionFailedError,
+  UnauthorizedError,
 } from "../../shared/errors/app-error.js";
+import { INVALID_AUTHOR_MESSAGE } from "./recipe.repository.js";
 import type {
   CreateRecipeRecordInput,
   IRecipeRepository,
@@ -495,6 +497,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
       recipeId: RECIPE_ID,
       reviewerId: CHEF.id,
       expectedVersions: [1],
+      authorize: expect.any(Function),
     });
     expect(result).toEqual({ recipe: approved, version: 2 });
   });
@@ -516,6 +519,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
       recipeId: RECIPE_ID,
       reviewerId: nutritionist.id,
       expectedVersions: [1],
+      authorize: expect.any(Function),
     });
     expect(result).toEqual({ recipe: approved, version: 2 });
   });
@@ -639,6 +643,7 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
       recipeId: RECIPE_ID,
       reviewerId: CHEF.id,
       expectedVersions: [3],
+      authorize: expect.any(Function),
     });
     expect(result.version).toBe(4);
   });
@@ -716,6 +721,42 @@ describe("RecipeService.approve — Aprobación profesional (HU-07, RN-04, RN-05
     // Assert
     expect(err).toBeInstanceOf(PreconditionFailedError);
     expect(err).toMatchObject({ statusCode: 412, message: RECIPE_VERSION_MISMATCH_MESSAGE });
+  });
+
+  it("delega canApprove para revalidar el rol vigente del revisor bloqueado (ADR-0009)", async () => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    approveWithAudit.mockResolvedValueOnce({ outcome: "approved", recipe: approvedBy(CHEF.id), version: 2 });
+    const service = new RecipeService(repository);
+
+    // Act
+    await service.approve(CHEF, RECIPE_ID, IF_MATCH_V1);
+    const authorize = approveWithAudit.mock.calls[0]?.[0].authorize;
+
+    // Assert — el predicado aplica RN-04/RN-05 sobre el estado que le pase el repositorio
+    expect(authorize?.({ id: CHEF.id, role: "NUTRITIONIST" })).toBe(true);
+    expect(authorize?.({ id: CHEF.id, role: "USER" })).toBe(false);
+    expect(authorize?.({ id: CHEF.id, role: "ADMIN" })).toBe(false);
+    expect(authorize?.({ id: AUTHOR_ID, role: "CHEF" })).toBe(false);
+  });
+
+  it.each([
+    ["actor_inactive", UnauthorizedError, 401, INVALID_AUTHOR_MESSAGE],
+    ["actor_forbidden", ForbiddenError, 403, RECIPE_APPROVAL_FORBIDDEN_MESSAGE],
+  ] as const)("traduce %s de la transacción a %s", async (outcome, ErrorClass, statusCode, message) => {
+    // Arrange
+    const { repository, findById, approveWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(draft());
+    approveWithAudit.mockResolvedValueOnce({ outcome });
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.approve(CHEF, RECIPE_ID, IF_MATCH_V1));
+
+    // Assert
+    expect(err).toBeInstanceOf(ErrorClass);
+    expect(err).toMatchObject({ statusCode, message });
   });
 
   it("lanza NotFoundError 404 si la transacción ya no encuentra la receta (borrado concurrente)", async () => {
@@ -963,7 +1004,11 @@ describe("RecipeService.delete — Eliminación física (HU-06, RN-03)", () => {
 
     // Assert
     expect(findById).toHaveBeenCalledWith(RECIPE_ID);
-    expect(deleteWithAudit).toHaveBeenCalledWith({ recipeId: RECIPE_ID, actorId: actor.id });
+    expect(deleteWithAudit).toHaveBeenCalledWith({
+      recipeId: RECIPE_ID,
+      actorId: actor.id,
+      authorize: expect.any(Function),
+    });
     expect(result).toEqual({ id: RECIPE_ID });
   });
 
@@ -998,6 +1043,40 @@ describe("RecipeService.delete — Eliminación física (HU-06, RN-03)", () => {
     expect(err).toBeInstanceOf(ForbiddenError);
     expect(err).toMatchObject({ statusCode: 403, message: RECIPE_DELETE_FORBIDDEN_MESSAGE });
     expect(deleteWithAudit).not.toHaveBeenCalled();
+  });
+
+  it("delega canDelete para revalidar el rol vigente del actor bloqueado (ADR-0009)", async () => {
+    // Arrange
+    const { repository, findById, deleteWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(toRecord(buildRecordInput()));
+    const service = new RecipeService(repository);
+
+    // Act
+    await service.delete({ id: OTHER, role: "ADMIN" }, RECIPE_ID);
+    const authorize = deleteWithAudit.mock.calls[0]?.[0].authorize;
+
+    // Assert — un ADMIN degradado ya no borra lo ajeno; el Autor siempre puede
+    expect(authorize?.({ id: OTHER, role: "ADMIN" })).toBe(true);
+    expect(authorize?.({ id: OTHER, role: "USER" })).toBe(false);
+    expect(authorize?.({ id: AUTHOR_ID, role: "USER" })).toBe(true);
+  });
+
+  it.each([
+    ["actor_inactive", UnauthorizedError, 401, INVALID_AUTHOR_MESSAGE],
+    ["actor_forbidden", ForbiddenError, 403, RECIPE_DELETE_FORBIDDEN_MESSAGE],
+  ] as const)("traduce %s de la transacción a %s", async (outcome, ErrorClass, statusCode, message) => {
+    // Arrange
+    const { repository, findById, deleteWithAudit } = createMockRepository();
+    findById.mockResolvedValueOnce(toRecord(buildRecordInput()));
+    deleteWithAudit.mockResolvedValueOnce({ outcome });
+    const service = new RecipeService(repository);
+
+    // Act
+    const err = await captureError(service.delete({ id: OTHER, role: "ADMIN" }, RECIPE_ID));
+
+    // Assert
+    expect(err).toBeInstanceOf(ErrorClass);
+    expect(err).toMatchObject({ statusCode, message });
   });
 
   it("lanza NotFoundError 404 si un borrado concurrente ganó la carrera", async () => {

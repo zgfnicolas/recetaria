@@ -21,6 +21,7 @@ import {
   RecipeService,
   UPDATE_REQUIRES_FIELD_MESSAGE,
 } from "../../../src/modules/recipes/index.js";
+import { createDbActorResolver } from "../../support/users.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
   secret: "test-jwt-secret-".repeat(3),
@@ -451,7 +452,7 @@ describe("PUT /api/v1/recipes/:id — Edición por el Autor (Integración HTTP +
   describe("409 Conflict", () => {
     /** App con `generateSlug` determinístico inyectado para forzar una colisión real (`P2002`). */
     function buildAppWithFixedSlug(slug: string): express.Express {
-      const authGuard = createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret });
+      const authGuard = createAuthMiddleware({ secret: TEST_JWT_CONFIG.secret, resolveActor: createDbActorResolver(db) });
       const service = new RecipeService(new RecipeRepository(db.prisma), { generateSlug: () => slug });
       const [authRouter] = buildApiRouters(db.prisma, { jwt: TEST_JWT_CONFIG });
       if (authRouter === undefined) {
