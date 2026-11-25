@@ -1,5 +1,5 @@
 # PRD — Recetaria API
-Versión 1.4 · Última actualización: 2026-11-24 · Responsable: Facundo Nicolás González
+Versión 1.5 · Última actualización: 2026-11-24 · Responsable: Facundo Nicolás González
 
 ## 1. Visión
 Centralizar un catálogo confiable de recetas gastronómicas donde el contenido generado por la comunidad es validado clínica y culinariamente por nutricionistas y chefs profesionales.
@@ -18,11 +18,12 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 
 ## 5. Alcance
 ### Incluido en la versión 1 (MVP)
-- **Base arquitectónica:** Node.js 24 LTS, ESM nativo (`nodenext`), Express 5, TypeScript 7 estricto (`tsx` en desarrollo) y PostgreSQL 15 + Prisma 7 GA (`@prisma/adapter-pg`) organizados por componentes (`auth`, `recipes`) en 4 capas (`Router -> Controller -> Service -> Repository`), con `src/app.ts` separado de `src/server.ts`.
+- **Base arquitectónica:** Node.js 24 LTS, ESM nativo (`nodenext`), Express 5, TypeScript 7 estricto (`tsx` en desarrollo) y PostgreSQL 15 + Prisma 7 GA (`@prisma/adapter-pg`) organizados por componentes (`auth`, `recipes`, `users`) en 4 capas (`Router -> Controller -> Service -> Repository`), con `src/app.ts` separado de `src/server.ts`.
 - **Modelos activos (3):** `User`, `Recipe` y `AuditLog` (autenticación 100 % stateless sin tabla `sessions`).
 - **Seguridad e identidad:** registro (`POST /api/v1/auth/register`, que crea siempre `USER` y rechaza `role` con `400`, ADR-0007) y login (`POST /api/v1/auth/login`) con Bcrypt (`>= 10` rounds), rechazo `401` si `isActive === false` y Bearer JWT (`{ id, role }`), más usuarios semilla (*seed*) para los 4 roles.
 - **CRUD de recetas:** alta (`POST /api/v1/recipes`), lectura pública paginada (`GET /api/v1/recipes` con `?page=&limit=`, `GET /api/v1/recipes/:id`), consulta autenticada de recetas propias (`GET /api/v1/recipes/mine`), edición parcial o completa por el autor (`PUT /api/v1/recipes/:id`) y borrado físico por el autor o `ADMIN` (`DELETE /api/v1/recipes/:id`).
 - **Validaciones:** Zod 4 estricto (`z.strictObject`) en middleware para formato/tipos/prevención BOPLA (incluyendo `tags` acotado y `nutritionalInfo` tipado) y validaciones explícitas de negocio en `RecipeService` (`prepTimeMinutes` entre `1` y `1440`, ingredientes con `quantity > 0`, ownership, bloqueo de auto-aprobación y detección de receta ya aprobada).
+- **Administración de roles:** `PATCH /api/v1/users/:id/role`, exclusivo de `ADMIN` (revalidado en la base), con registro `ROLE_CHANGED` en `audit_logs` dentro de `prisma.$transaction` (`RN-09`, ADR-0008, #53).
 - **Aprobación profesional:** transición `DRAFT -> APPROVED` en `PUT /api/v1/recipes/:id/approve` exclusiva de `CHEF`/`NUTRITIONIST` con registro en `audit_logs` (`entityName = "Recipe"`) dentro de `prisma.$transaction`.
 - **Extras del TP integrados:** filtros con `req.query` (`?status=`, `?difficulty=`, `?authorId=`, `?page=`, `?limit=`), control de roles RBAC, relación `User`–`Recipe` (`authorId`, `reviewedById`) y middleware de logging HTTP en consola (`loggerMiddleware`).
 - **Operación y entrega:** endpoints `GET /health` (liveness liviano sin DB para Docker `HEALTHCHECK`) y `GET /health/ready` (readiness verificando PostgreSQL), respuestas en formato JSend extendido (`200`, `201`, `400`, `401`, `403`, `404`, `409`, `500`, `503`) y colección exportada en `docs/thunder-client-collection.json`.
@@ -44,6 +45,7 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 | HU-05 | autor de una receta | editar parcial o totalmente mi propia receta | corregir datos sin conservar aprobaciones previas obsoletas | Alta |
 | HU-06 | autor o administrador | eliminar físicamente una receta | retirar contenido propio o moderar el catálogo con auditoría | Media |
 | HU-07 | chef o nutricionista | aprobar una receta en `DRAFT` de otro autor | publicarla como `APPROVED` con registro de auditoría | Alta |
+| HU-08 | administrador | cambiar el rol de otro usuario | otorgar o revocar perfiles profesionales y de moderación con trazabilidad | Media |
 
 ### Criterios de aceptación
 
@@ -75,6 +77,10 @@ Recetaria combina contenido generado por usuarios (UGC) con un flujo formal de a
 - Dado un `USER`, `ADMIN` o el propio autor de la receta intentando ejecutar `PUT /api/v1/recipes/:id/approve`, entonces recibe HTTP `403 Forbidden`.
 - Dado un `CHEF` o `NUTRITIONIST` distinto del autor sobre una receta ya `APPROVED`, entonces recibe HTTP `409 Conflict`.
 - Dado un `CHEF` o `NUTRITIONIST` distinto del autor sobre una receta en `DRAFT`, entonces dentro de `prisma.$transaction` cambia el estado a `APPROVED`, registra `reviewedById` y `publishedAt`, e inserta el evento `APPROVE` en `audit_logs`.
+
+**HU-08 — Administración de roles**
+- Dado un `ADMIN` activo y otro usuario existente, cuando envía `PATCH /api/v1/users/:id/role` con `{ role }` válido, entonces dentro de `prisma.$transaction` cambia el rol, inserta `ROLE_CHANGED` en `audit_logs` y retorna `200 OK` con `{ id, email, role }`. Si ya tenía ese rol, retorna `200` sin auditar.
+- Dado un `USER`, `CHEF` o `NUTRITIONIST`, un `ADMIN` que intenta cambiar su propio rol o un `ADMIN` ya degradado o desactivado en la base con JWT vigente, entonces recibe `403 Forbidden`. Un `:id` inexistente devuelve `404` y un cambio que dejaría el sistema sin `ADMIN` activo devuelve `409`.
 
 ## 7. Requisitos no funcionales
 | ID | Categoría | Requisito |

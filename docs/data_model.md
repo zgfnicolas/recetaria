@@ -100,14 +100,14 @@ Entidad principal con el contenido, metadatos nutricionales y estado de validaci
 | `updatedAt` | `TIMESTAMPTZ` | No | Última actualización (trigger automático) |
 
 ### Tabla `audit_logs`
-Registro inmutable de trazabilidad sobre cambios críticos (`APPROVE`, `RESET_TO_DRAFT`, `DELETE`).
+Registro inmutable de trazabilidad sobre cambios críticos: recetas (`APPROVE`, `RESET_TO_DRAFT`, `DELETE`) y usuarios (`ROLE_CHANGED`, #53).
 
 | Campo | Tipo | Nulo | Descripción |
 |---|---|:-:|---|
 | `id` | `UUID` | No | Identificador del evento (`PK`) |
-| `entityName` | `VARCHAR(50)` | No | Nombre canónico de la entidad afectada (`'Recipe'`) |
+| `entityName` | `VARCHAR(50)` | No | Nombre canónico de la entidad afectada (`'Recipe'` o `'User'`, ADR-0008) |
 | `entityId` | `UUID` | No | ID del registro alterado (sin FK hacia `recipes` para conservar trazabilidad tras `DELETE`) |
-| `action` | `VARCHAR(50)` | No | Acción ejecutada (`'APPROVE'`, `'RESET_TO_DRAFT'`, `'DELETE'`) |
+| `action` | `VARCHAR(50)` | No | Acción ejecutada (`'APPROVE'`, `'RESET_TO_DRAFT'`, `'DELETE'` sobre `Recipe`; `'ROLE_CHANGED'` sobre `User`, con `oldValues`/`newValues = { role }`) |
 | `userId` | `UUID (FK)` | Sí | Usuario que ejecutó la acción (`-> users.id`) |
 | `oldValues` | `JSONB` | Sí | Snapshot previo al cambio |
 | `newValues` | `JSONB` | Sí | Snapshot posterior al cambio |

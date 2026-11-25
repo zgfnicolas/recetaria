@@ -22,7 +22,7 @@ export type { MountedRouter } from "./bootstrap/container.js";
 export const BODY_LIMIT = "100kb";
 export const API_V1_PREFIX = "/api/v1";
 
-const DEFAULT_CORS_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"] as const;
+const DEFAULT_CORS_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;
 const DEFAULT_CORS_ALLOWED_HEADERS = ["Content-Type", "Authorization", "If-Match"] as const;
 /** `ETag` legible desde navegadores para encadenarlo en `If-Match` (#46). */
 const DEFAULT_CORS_EXPOSED_HEADERS = [...RATE_LIMIT_EXPOSED_HEADERS, "ETag"] as const;

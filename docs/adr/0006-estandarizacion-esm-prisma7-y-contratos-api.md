@@ -1,7 +1,7 @@
 # 6. Estandarización de Node 24 LTS, ESM nativo, Prisma 7 GA y contratos API
 
 Fecha: 2026-11-20
-Estado: Aceptada
+Estado: Aceptada (la convención `entityName = "Recipe"` de `audit_logs` se extiende con `"User"` en [ADR-0008](0008-administracion-de-roles-auditada.md), #53)
 
 ## Contexto
 Al auditar la documentación, las configuraciones técnicas y las skills de ingeniería antes de implementar `src/`, surgieron incompatibilidades y ambigüedades:

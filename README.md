@@ -74,6 +74,7 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 | `PUT` | `/api/v1/recipes/:id` | Autor (`RN-02`) | Actualiza parcial o totalmente la receta propia (al menos 1 campo; solo cambia lo enviado; `null` vacía `nutritionalInfo`/`coverImageUrl`/`videoUrl`; `title` regenera el `slug`); si estaba `APPROVED`, reinicia a `DRAFT` con registro `RESET_TO_DRAFT` en `audit_logs` | `200`, `400`, `401`, `403`, `404`, `409` |
 | `DELETE` | `/api/v1/recipes/:id` | Autor o `ADMIN` (`RN-03`) | Elimina físicamente la receta dentro de `$transaction` registrando `DELETE` con snapshot `{ title, authorId, status }` en `audit_logs` (sobrevive al borrado); responde `data: { id }` | `200`, `400`, `401`, `403`, `404` |
 | `PUT` | `/api/v1/recipes/:id/approve` | `CHEF` o `NUTRITIONIST` ≠ Autor (`RN-04`, `RN-05`) | Aprueba receta `DRAFT → APPROVED` dentro de `$transaction` registrando `APPROVE` en `audit_logs`; **exige `If-Match`** con el `ETag` de la versión revisada (de `GET /:id`) | `200`, `400`, `401`, `403`, `404`, `409`, `412`, `428` |
+| `PATCH` | `/api/v1/users/:id/role` | `ADMIN` (`RN-09`) | Cambia el rol de otro usuario (`{ role }`), revalidando al actor en la base, nunca el propio y sin dejar el sistema sin `ADMIN`; registra `ROLE_CHANGED` en `audit_logs` (ADR-0008). El rol nuevo rige desde el próximo login | `200`, `400`, `401`, `403`, `404`, `409` |
 
 ## Extras opcionales implementados
 - **Filtros con `req.query`:** `GET /api/v1/recipes?status=APPROVED&difficulty=EASY&authorId=<uuid>&page=1&limit=20`.
