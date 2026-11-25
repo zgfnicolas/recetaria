@@ -84,7 +84,7 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 - **Middleware de logging:** `loggerMiddleware` imprime en consola método, URL, código HTTP y duración de cada petición sin exponer headers sensibles.
 
 ## Pruebas (Vitest + Supertest + Thunder Client)
-- **Automatizadas:** `npm test` ejecuta pruebas unitarias (`*.service.test.ts`, mockeando solo `Repository`) e integración con Supertest contra PostgreSQL Docker.
+- **Automatizadas:** `npm test` ejecuta pruebas unitarias (`*.service.test.ts`, mockeando solo `Repository`) e integración con Supertest contra PostgreSQL Docker. Incluye, además, las suites End-to-End de `tests/e2e/` (ciclo de vida completo, rutas privadas por defecto y matriz OWASP) y la prueba de fronteras de capas de `tests/architecture/` (#22); detalle en [`docs/testing.md`](docs/testing.md).
 - **Thunder Client:** importar la colección exportada en `docs/thunder-client-collection.json` (cubre todos los endpoints y casos de error `400`, `401`, `403`, `404` y `409`).
 - **Usuarios semilla (contraseña `password123`):** `user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com` y `admin@recetaria.com`.
 
