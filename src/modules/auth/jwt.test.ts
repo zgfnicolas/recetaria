@@ -1,12 +1,13 @@
 import { generateKeyPairSync } from "node:crypto";
 import jwt from "jsonwebtoken";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { UnauthorizedError } from "../../shared/errors/app-error.js";
 import {
   assertValidJwtConfig,
   assertValidJwtSecret,
   INVALID_TOKEN_MESSAGE,
   JWT_ALGORITHM,
+  JWT_CLOCK_TOLERANCE_SECONDS,
   MIN_JWT_SECRET_LENGTH,
   signAccessToken,
   verifyAccessToken,
@@ -139,6 +140,40 @@ describe("jwt (signAccessToken HS256 y validación fail-closed)", () => {
         algorithm: "HS256",
       });
       expect(() => verifyAccessToken(token, TEST_JWT_SECRET)).toThrow(UnauthorizedError);
+    });
+
+    describe("iat en el futuro (#22): no puede extender la vigencia más allá del tope", () => {
+      const FIXED_NOW_MS = Date.UTC(2026, 10, 24, 12, 0, 0);
+      const fixedNow = FIXED_NOW_MS / 1000;
+      const signAt = (iat: number, lifetime = 3600) =>
+        jwt.sign({ id: ACTOR_ID, role: "ADMIN", iat, exp: iat + lifetime }, TEST_JWT_SECRET, { algorithm: "HS256" });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it("rechaza un token con iat 10 años en el futuro aunque exp - iat ≤ 1d", () => {
+        vi.useFakeTimers({ now: FIXED_NOW_MS });
+        const token = signAt(fixedNow + 10 * 365 * 86_400);
+        expect(() => verifyAccessToken(token, TEST_JWT_SECRET)).toThrow(UnauthorizedError);
+      });
+
+      it("rechaza un iat apenas por encima de la tolerancia de reloj", () => {
+        vi.useFakeTimers({ now: FIXED_NOW_MS });
+        const token = signAt(fixedNow + JWT_CLOCK_TOLERANCE_SECONDS + 1);
+        expect(() => verifyAccessToken(token, TEST_JWT_SECRET)).toThrow(INVALID_TOKEN_MESSAGE);
+      });
+
+      it("acepta un iat dentro de la tolerancia de reloj (desfase legítimo entre servidores)", () => {
+        vi.useFakeTimers({ now: FIXED_NOW_MS });
+        const token = signAt(fixedNow + JWT_CLOCK_TOLERANCE_SECONDS);
+        expect(verifyAccessToken(token, TEST_JWT_SECRET)).toEqual({ id: ACTOR_ID, role: "ADMIN" });
+      });
+
+      it("la tolerancia es acotada (≤ 5 min) para no reabrir la ventana", () => {
+        expect(JWT_CLOCK_TOLERANCE_SECONDS).toBeGreaterThan(0);
+        expect(JWT_CLOCK_TOLERANCE_SECONDS).toBeLessThanOrEqual(300);
+      });
     });
 
     it("acepta un token emitido con la vigencia máxima permitida (1d)", () => {
