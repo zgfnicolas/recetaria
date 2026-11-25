@@ -6,6 +6,7 @@ import {
   getDatabase,
   type Database,
 } from "../../../src/infrastructure/database/prisma.js";
+import { truncateAll } from "../../support/database.js";
 
 type DbErrorInfo = {
   readonly prismaCode: string | undefined;
@@ -95,7 +96,7 @@ async function expectCheckViolation(
 }
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 type CreateUserOptions = {

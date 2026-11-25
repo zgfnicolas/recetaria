@@ -9,6 +9,7 @@ import {
 } from "../../../src/infrastructure/database/prisma.js";
 import { UserRepository, type JwtConfig } from "../../../src/modules/auth/index.js";
 import { createUserWithRole } from "../../support/users.js";
+import { truncateAll } from "../../support/database.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const UUID_V4_PATTERN =
@@ -21,7 +22,7 @@ const TEST_JWT_CONFIG: JwtConfig = {
 };
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 describe("POST /api/v1/auth/login — Integración HTTP (Supertest + PostgreSQL 15)", () => {

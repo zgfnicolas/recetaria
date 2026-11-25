@@ -19,6 +19,7 @@ import {
   RECIPE_NOT_FOUND_MESSAGE,
   RECIPE_VERSION_MISMATCH_MESSAGE,
 } from "../../../src/modules/recipes/index.js";
+import { truncateAll } from "../../support/database.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
   secret: "test-jwt-secret-".repeat(3),
@@ -41,7 +42,7 @@ function bearer(user: Readonly<{ id: string; role: UserRole }>): string {
 }
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 async function seed(db: Database): Promise<void> {

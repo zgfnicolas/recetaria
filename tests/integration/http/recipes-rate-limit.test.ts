@@ -9,6 +9,7 @@ import {
 } from "../../../src/infrastructure/database/prisma.js";
 import { RATE_LIMIT_EXCEEDED_MESSAGE } from "../../../src/middlewares/rate-limit.middleware.js";
 import type { JwtConfig } from "../../../src/modules/auth/index.js";
+import { truncateAll } from "../../support/database.js";
 
 const TEST_JWT_CONFIG: JwtConfig = {
   secret: "test-jwt-secret-".repeat(3),
@@ -16,7 +17,7 @@ const TEST_JWT_CONFIG: JwtConfig = {
 };
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 describe("Rate limit del catálogo público GET /api/v1/recipes (#36, OWASP API4)", () => {

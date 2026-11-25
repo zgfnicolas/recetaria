@@ -19,6 +19,7 @@ import {
   RecipeService,
 } from "../../../src/modules/recipes/index.js";
 import { createDbActorResolver, registerAndLogin } from "../../support/users.js";
+import { truncateAll } from "../../support/database.js";
 
 const EXPECTED_MVP_ROLES = ["USER", "CHEF", "NUTRITIONIST", "ADMIN"] as const;
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*-[0-9a-f]{8}$/;
@@ -41,7 +42,7 @@ const VALID_RECIPE = {
 } as const;
 
 async function truncateTables(db: Database): Promise<void> {
-  await db.prisma.$executeRaw`TRUNCATE TABLE "audit_logs", "recipes", "users" RESTART IDENTITY;`;
+  await truncateAll(db);
 }
 
 function createApp(
