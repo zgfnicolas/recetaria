@@ -16,7 +16,7 @@ Prioridades: **Correctitud → Integridad → Seguridad → Recuperabilidad → 
 
 ## 0. Modo de trabajo y reglas duras (MUST)
 
-Antes de escribir DDL o SQL, fijá: entidades e identidad, cardinalidad/opcionalidad, invariantes de negocio (`RN-01`–`RN-08`), queries críticas con volumen esperado, concurrencia y accesos. Si faltan datos de bajo riesgo, asumí, declaralo explícitamente y avanzá.
+Antes de escribir DDL o SQL, fijá: entidades e identidad, cardinalidad/opcionalidad, invariantes de negocio (`RN-01`–`RN-10`), queries críticas con volumen esperado, concurrencia y accesos. Si faltan datos de bajo riesgo, asumí, declaralo explícitamente y avanzá.
 
 **Formato de entrega:**
 - **Esquema:** DDL ejecutable + tabla de decisiones (*decisión / alternativa / motivo*) + índices ligados a su query real.

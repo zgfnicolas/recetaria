@@ -1,6 +1,6 @@
 # Patrones de Ingeniería TypeScript para Recetaria API
 
-Referencia ejecutable de [typescript-engineering](../SKILL.md) alineada a **TypeScript 7**, **Node.js 22+ LTS**, **Express 5**, **Zod 4** y las reglas de dominio (`RN-01`–`RN-08`) de Recetaria API.
+Referencia ejecutable de [typescript-engineering](../SKILL.md) alineada a **TypeScript 7**, **Node.js 22+ LTS**, **Express 5**, **Zod 4** y las reglas de dominio (`RN-01`–`RN-10`) de Recetaria API.
 
 ---
 

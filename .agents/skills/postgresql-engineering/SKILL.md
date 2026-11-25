@@ -16,7 +16,7 @@ Prioridades: **Correctitud → Integridad → Seguridad → Recuperabilidad → 
 
 ## 0. Modo de trabajo y reglas duras (MUST)
 
-Antes de diseñar u optimizar, determiná: invariantes (`RN-01`–`RN-08`), límites transaccionales (`RN-06`), concurrencia, las 5–10 queries críticas con su SLO (p95/p99), volumen/retención y RPO/RTO.
+Antes de diseñar u optimizar, determiná: invariantes (`RN-01`–`RN-10`), límites transaccionales (`RN-06`), concurrencia, las 5–10 queries críticas con su SLO (p95/p99), volumen/retención y RPO/RTO.
 
 **Formato de entrega:**
 - **Esquema:** DDL ejecutable en PG 15 + tabla de decisiones + índices justificados por query real.
