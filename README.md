@@ -132,6 +132,7 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 | `npm run docker:smoke` | Pruebas de humo del despliegue (#24): levanta prod y dev en proyectos aislados y efímeros (no usa tu `.env` ni tu base) y verifica salud, endurecimiento, respuestas JSend y ADR-0006. Opciones: `-- --only=prod\|dev`, `-- --keep`. Puertos: `SMOKE_PORT` (3100), `SMOKE_DEV_PORT` (3101) y `SMOKE_DEV_DB_PORT` (55432) |
 
 ## Documentación
+- [Runbook de despliegue post-#48: auditar cuentas privilegiadas y rotar `JWT_SECRET`](docs/runbooks/post-48-deploy.md) (#51)
 - [Requisitos del producto (PRD)](docs/prd.md)
 - [Roles y permisos](docs/roles.md)
 - [Reglas de negocio](docs/business_rules.md)
