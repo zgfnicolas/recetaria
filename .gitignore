@@ -151,3 +151,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Backups de base de datos (runbooks de operación, #51): contienen hashes y emails
+*.dump
