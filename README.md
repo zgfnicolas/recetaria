@@ -93,6 +93,8 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
   3. Ejecutar **Run All** sobre la colección. El orden importa:
      - los login guardan `userToken`, `chefToken`, `nutriToken` y `adminToken`;
      - el detalle guarda el `ETag` (`recipeEtag`) que exige la aprobación (#46).
+
+     **Plan gratuito de Thunder Client:** no ejecuta colecciones de más de 50 pedidos (ni siquiera una carpeta suelta, porque cuenta la colección entera). En ese caso, importá en su lugar las dos partes de `docs/thunder-client/` y ejecutá **Run All** en orden: primero `recetaria-parte-1-de-2.json` (Health → Errores y RBAC, 48 pedidos) y después `recetaria-parte-2-de-2.json` (Users y Cleanup, 14 pedidos), con el mismo entorno activo. Los tokens, ids y `ETag` pasan de una parte a la otra por el entorno. Las partes se derivan de la colección completa con `npx tsx scripts/thunder-client/split-collection.ts`, y `tests/docs/thunder-client-parts.test.ts` falla si quedan desincronizadas.
   4. Cada pedido lleva en el nombre el código esperado (`[200]`, `[403]`, `[409]`, …) y un test que lo verifica. Las aserciones son de código HTTP: el contenido de las respuestas (estados, auditoría, filtros) lo verifican las suites E2E de `tests/e2e/` (#22).
 
   **Qué cubre:** los 13 endpoints y los códigos `200`, `201`, `400`, `401`, `403` (`RN-02`…`RN-05`, `RN-09`, `RN-10`), `404`, `409`, `412` y `428`.

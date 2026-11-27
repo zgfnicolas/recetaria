@@ -1,0 +1,409 @@
+{
+  "clientName": "Thunder Client",
+  "collectionName": "Recetaria API — MVP (parte 2 de 2)",
+  "collectionId": "937cc1da-000f-5490-b57e-0940a43a12db",
+  "dateExported": "2026-11-25T00:00:00.000Z",
+  "version": "1.2",
+  "ref": "rctrCol01p2",
+  "folders": [
+    {
+      "_id": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "Users — Administración",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 60000
+    },
+    {
+      "_id": "1781231f-0e5e-561a-8c8b-85f7e14fad42",
+      "name": "Cleanup",
+      "containerId": "",
+      "created": "2026-11-25T00:00:00.000Z",
+      "sortNum": 70000
+    }
+  ],
+  "requests": [
+    {
+      "_id": "6733e83f-8b33-5b99-b1ea-0a7aafb54b0b",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[200] Promover al usuario nuevo a CHEF como ADMIN (RN-09)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/role",
+      "method": "PATCH",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"CHEF\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "6271e832-cade-5f9d-a84b-688625bc82c3",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[200] Devolver al usuario nuevo a USER (RN-09)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/role",
+      "method": "PATCH",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"USER\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "54220e71-01d8-536a-b38f-92a8fe946efa",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[403] Cambiar un rol como USER (RN-09)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/role",
+      "method": "PATCH",
+      "sortNum": 30000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"ADMIN\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{userToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "b45ab033-ee18-59d8-8afc-fc296b6a57f2",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[403] ADMIN cambiando su propio rol (RN-09)",
+      "url": "{{baseUrl}}/api/v1/users/{{adminId}}/role",
+      "method": "PATCH",
+      "sortNum": 40000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"USER\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "2981e989-3e82-50d7-b481-a9722cac8b78",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[404] Cambiar el rol de un usuario inexistente",
+      "url": "{{baseUrl}}/api/v1/users/99999999-9999-4999-8999-999999999999/role",
+      "method": "PATCH",
+      "sortNum": 50000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"CHEF\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "_id": "71b424cf-4b45-5fa4-a416-82c7e59c7818",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[401] Cambiar un rol sin token",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/role",
+      "method": "PATCH",
+      "sortNum": 60000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"role\": \"CHEF\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "401"
+        }
+      ]
+    },
+    {
+      "_id": "0c2895e0-a439-5e68-b931-e4f4d69364e6",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[200] Desactivar al usuario nuevo como ADMIN (RN-10)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/status",
+      "method": "PATCH",
+      "sortNum": 70000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"isActive\": false\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "bb31fe7d-0077-591d-8421-99e6b399e5f7",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[401] Login de la cuenta desactivada (genérico, RN-08/RN-10)",
+      "url": "{{baseUrl}}/api/v1/auth/login",
+      "method": "POST",
+      "sortNum": 80000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"email\": \"{{newUserEmail}}\",\n  \"password\": \"Password-segura-1\"\n}",
+        "form": []
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "401"
+        }
+      ]
+    },
+    {
+      "_id": "90514495-7ad5-59fc-a1f0-e4bc972d8fa8",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[200] Reactivar al usuario nuevo como ADMIN (RN-10)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/status",
+      "method": "PATCH",
+      "sortNum": 90000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"isActive\": true\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "df08ab67-9320-5756-9c9b-ad6a75172024",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[400] Cambiar estado con un campo extra (BOPLA, RN-10)",
+      "url": "{{baseUrl}}/api/v1/users/{{newUserId}}/status",
+      "method": "PATCH",
+      "sortNum": 100000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"isActive\": false,\n  \"role\": \"ADMIN\"\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "400"
+        }
+      ]
+    },
+    {
+      "_id": "48254c7e-71fd-5441-b144-d8f4b975ea0c",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "f6d1ed81-a550-5c6e-a4e3-39bf0d31b374",
+      "name": "[403] ADMIN desactivando su propia cuenta (RN-10)",
+      "url": "{{baseUrl}}/api/v1/users/{{adminId}}/status",
+      "method": "PATCH",
+      "sortNum": 110000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "body": {
+        "type": "json",
+        "raw": "{\n  \"isActive\": false\n}",
+        "form": []
+      },
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "403"
+        }
+      ]
+    },
+    {
+      "_id": "b116bbb7-89ba-5efa-a175-ad37abc33e66",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "1781231f-0e5e-561a-8c8b-85f7e14fad42",
+      "name": "[200] Borrar la receta como ADMIN (RN-03)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "DELETE",
+      "sortNum": 10000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    },
+    {
+      "_id": "fd6a1434-1d25-5798-99dd-4c8d0453a368",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "1781231f-0e5e-561a-8c8b-85f7e14fad42",
+      "name": "[404] Borrar la misma receta otra vez",
+      "url": "{{baseUrl}}/api/v1/recipes/{{recipeId}}",
+      "method": "DELETE",
+      "sortNum": 20000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{adminToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "404"
+        }
+      ]
+    },
+    {
+      "_id": "80e7b2c3-3e30-5f1d-b321-9a66be3241bd",
+      "colId": "937cc1da-000f-5490-b57e-0940a43a12db",
+      "containerId": "1781231f-0e5e-561a-8c8b-85f7e14fad42",
+      "name": "[200] Borrar su propia receta como CHEF (autor, RN-03)",
+      "url": "{{baseUrl}}/api/v1/recipes/{{chefRecipeId}}",
+      "method": "DELETE",
+      "sortNum": 30000,
+      "created": "2026-11-25T00:00:00.000Z",
+      "modified": "2026-11-25T00:00:00.000Z",
+      "headers": [],
+      "auth": {
+        "type": "bearer",
+        "bearer": "{{chefToken}}"
+      },
+      "tests": [
+        {
+          "type": "res-code",
+          "custom": "",
+          "action": "equal",
+          "value": "200"
+        }
+      ]
+    }
+  ]
+}
