@@ -77,6 +77,8 @@ const collectionSchema = z.strictObject({
   collectionId: z.uuid(),
   dateExported: z.iso.datetime(),
   version: z.literal("1.2"),
+  // Thunder Client 3.2.7 solo reconoce el formato nativo si `ref` existe y no está vacío.
+  ref: z.string().min(1),
   folders: z.array(
     z.strictObject({
       _id: z.uuid(),
@@ -95,6 +97,7 @@ const environmentSchema = z.strictObject({
   environmentId: z.uuid(),
   dateExported: z.iso.datetime(),
   version: z.literal("1.2"),
+  ref: z.string().min(1),
   variables: z.array(nameValueSchema),
 });
 
