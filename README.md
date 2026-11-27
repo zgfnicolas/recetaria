@@ -13,7 +13,7 @@ Backend: Node.js 24 LTS (ESM) + Express 5 + TypeScript 7 (`tsx`) · Base de dato
 
 ## Inicio rápido
 
-Requisitos previos: [Node.js 24 LTS](https://nodejs.org/) y [Docker Desktop](https://www.docker.com/products/docker-desktop/) con Compose v2.
+Requisitos previos: [Node.js 24 LTS](https://nodejs.org/) y Docker con Compose v2: [Docker Desktop](https://www.docker.com/products/docker-desktop/) en Windows y macOS, o Docker Desktop / Docker Engine en Linux. Si `npm run docker:db` falla, ver [Solución de problemas](#solución-de-problemas).
 
 ```bash
 git clone https://github.com/zgfnicolas/recetaria.git
@@ -56,6 +56,66 @@ PRISMA_HIDE_UPDATE_MESSAGE=1
 - Lista de IPs, rangos CIDR o presets (`loopback`, `linklocal`, `uniquelocal`), p. ej. `TRUST_PROXY=172.18.0.10`: confía solo en esas direcciones y es la opción más estricta. Preferí la IP exacta del proxy: un preset o rango amplio (p. ej. `uniquelocal` o la red de Docker completa) deja que cualquier otro host de esa red falsifique su IP.
 - Se rechazan al arrancar `true`, `false` y rangos más amplios que `/8` en IPv4 o `/16` en IPv6 (`0.0.0.0/0`, `0.0.0.0/1`, `::/0`, `::ffff:0:0/96`, …): equivaldrían a confiar en cualquier cliente.
 
+## Guía para evaluadores
+
+1. **Levantar el entorno:** seguir el [Inicio rápido](#inicio-rápido). Con `node -v` se verifica que sea `v24.x`, y la API responde en `http://localhost:3000/health`.
+2. **Pruebas automáticas:** `npm run build` (0 errores de TypeScript) y `npm test` (unitarias, integración, E2E, arquitectura y ejecución de la colección de Thunder Client). Usan una base aparte, `recetaria_test`, y no tocan la de desarrollo.
+3. **Thunder Client:** importar el entorno y las dos partes de la colección y ejecutarlas en orden (ver [Pruebas](#pruebas-vitest--supertest--thunder-client)).
+4. **Usuarios semilla** (contraseña `password123`): `user@recetaria.com`, `chef@recetaria.com`, `nutri@recetaria.com` y `admin@recetaria.com`.
+
+### Requisitos de la consigna
+
+| # | Requisito | Dónde se cumple |
+|---|---|---|
+| 1 | Node.js + Express + TypeScript, estructura por componentes | `src/modules/{auth,recipes,users}/` |
+| 2 | PostgreSQL con ORM y modelos `User` + entidad | Prisma 7: `User`, `Recipe` (y `AuditLog`) en `prisma/schema.prisma` |
+| 3 | CRUD completo | `GET /api/v1/recipes`, `GET /:id`, `POST`, `PUT /:id`, `DELETE /:id` |
+| 4 | Arquitectura en capas | `*.router.ts` → `*.controller.ts` → `*.service.ts` → `*.repository.ts`; lo verifica `tests/architecture/layer-boundaries.test.ts` |
+| 5 | ≥ 2 validaciones de negocio en el servicio | `RecipeService` (`src/modules/recipes/recipe.service.ts`): `prepTimeMinutes` en `[1, 1440]` e ingredientes con `quantity > 0` (`RN-07`), más ownership y auto-aprobación |
+| 6 | Registro y login con Bcrypt y JWT | `POST /api/v1/auth/register` y `/login` (`src/modules/auth/`) |
+| 7 | Rutas que escriben protegidas con middleware JWT | `src/middlewares/auth.middleware.ts`; sin token → `401` |
+| 8 | Códigos `200`, `201`, `400`, `401`, `404`, `500` | Colección de Thunder Client; el `500` lo cubre `npm test` (`tests/e2e/owasp-abuse-matrix.test.ts`) |
+| 9 | `try/catch` en todos los controladores | `src/modules/*/*.controller.ts` |
+| 10 | Secretos en `.env` con `dotenv`, ignorado y con `.env.example` | `src/config/env.ts`, `.gitignore` y `.env.example` |
+
+Los 4 extras opcionales están en [Extras opcionales implementados](#extras-opcionales-implementados).
+
+### Solución de problemas
+
+- **`Cannot connect to the Docker daemon` / `error during connect`:** Docker no está corriendo. En Windows y macOS, abrí Docker Desktop y esperá a que diga *Engine running*. En Linux con Docker Engine, ejecutá `sudo systemctl start docker`.
+- **`ports are not available … address already in use` al correr `npm run docker:db`:** otro proceso ya usa el puerto de `POSTGRES_PORT`. Ver [Docker en Windows, macOS y Linux](#docker-en-windows-macos-y-linux).
+
+#### Docker en Windows, macOS y Linux
+
+El proyecto funciona igual con Docker Desktop (Windows, macOS y Linux), Docker Engine (Linux) u otros motores compatibles (OrbStack o Colima en macOS), siempre que traigan **Compose v2** (`docker compose version`).
+
+**1. Ver qué ocupa el puerto** (reemplazá `5432` por el valor de `POSTGRES_PORT`):
+
+| Sistema | Comando |
+|---|---|
+| Linux | `ss -ltnp \| grep 5432` |
+| macOS | `lsof -nP -iTCP:5432 -sTCP:LISTEN` |
+| Windows (PowerShell) | `Get-NetTCPConnection -LocalPort 5432 -State Listen` (el `OwningProcess` se busca con `Get-Process -Id <pid>`) |
+
+**2. Según quién lo ocupe:**
+- **Un PostgreSQL instalado en el sistema** (lo más común en `5432`): cambiá `POSTGRES_PORT` en el `.env` (p. ej. `5433`) y usá **el mismo puerto** en `DATABASE_URL`. Después repetí `npm run docker:db`.
+- **Otro contenedor de Recetaria que ya está corriendo:** no hace falta hacer nada; la base ya está arriba (`docker ps` lo muestra).
+- **Dos motores de Docker en la misma máquina:** pasa si conviven Docker Engine y Docker Desktop en Linux, Docker Desktop y un Docker instalado dentro de WSL en Windows, o Docker Desktop y OrbStack/Colima en macOS. Cada motor tiene sus propios contenedores, así que uno puede tener la base corriendo y el otro choca contra su puerto. Para resolverlo:
+  ```bash
+  docker context ls                       # el activo lleva "*"
+  docker --context <otro> ps              # revisar qué corre en el otro motor
+  docker context use <contexto>           # quedarse siempre con el mismo
+  docker --context <otro> rm -f recetaria-postgres-1   # borrar la copia que no arrancó (si quedó en "Created")
+  ```
+  Si la base queda en el otro motor, empieza vacía: repetí `npx prisma migrate deploy` y `npm run db:seed`.
+
+**Copiar el `.env` en Windows:** `cp .env.example .env` funciona en PowerShell y Git Bash. En `cmd`, usá `copy .env.example .env`.
+- **Thunder Client: `No matching import provider found`:** se está importando un archivo que no es la exportación de esta versión del repositorio. Importá los archivos de `docs/` tal como están.
+- **Thunder Client: `The Free Version supports a maximum of 50 requests…`:** importá las dos partes de `docs/thunder-client/` en lugar de la colección completa.
+- **Todos los pedidos fallan o apuntan a una URL vacía:** el entorno activo no es `Recetaria — Local` (Thunder Client trae uno de muestra).
+- **`429 Too Many Requests` al repetir corridas:** los límites de login y registro viven en memoria; reiniciá `npm run dev` para limpiarlos (solo en local).
+- **El seed no corre:** `npm run db:seed` exige `NODE_ENV=development` o `test` en el `.env`.
+
 ## Catálogo de Endpoints
 
 Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
@@ -89,13 +149,17 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 - **Automatizadas:** `npm test` ejecuta pruebas unitarias (`*.service.test.ts`, mockeando solo `Repository`) e integración con Supertest contra PostgreSQL Docker. Incluye, además, las suites End-to-End de `tests/e2e/` (ciclo de vida completo, rutas privadas por defecto y matriz OWASP) y la prueba de fronteras de capas de `tests/architecture/` (#22); detalle en [`docs/testing.md`](docs/testing.md).
 - **Thunder Client** (#23): colección `docs/thunder-client-collection.json` (62 pedidos en 7 carpetas) y entorno `docs/thunder-client-environment.json`, con formato calibrado contra Thunder Client 3.2.7.
   1. Levantar la API con datos semilla: `npm run docker:db`, `npm run db:seed` y `npm run dev`.
-  2. En Thunder Client, importar el **entorno** (pestaña *Env* → *Import*) y activarlo, y después la **colección** (pestaña *Collections* → *Import*).
-  3. Ejecutar **Run All** sobre la colección. El orden importa:
+  2. En Thunder Client, importar el **entorno** `docs/thunder-client-environment.json` (pestaña *Env* → *Import*) y activarlo (*⋯* → *Set Active*; la barra de estado de VS Code debe decir `Current Env: Recetaria — Local`).
+  3. Importar la colección (pestaña *Collections* → *Import*):
+     - **Plan gratuito (lo habitual):** las dos partes de `docs/thunder-client/`, `recetaria-parte-1-de-2.json` (Health → Errores y RBAC, 48 pedidos) y `recetaria-parte-2-de-2.json` (Users y Cleanup, 14 pedidos). El plan gratuito no ejecuta colecciones de más de 50 pedidos, ni siquiera una carpeta suelta, porque cuenta la colección entera.
+     - **Plan pago:** la colección completa `docs/thunder-client-collection.json` (62 pedidos).
+  4. Ejecutar **Run All** (*⋯* de la colección → *Run All* → *Run*), con las partes **en orden**: primero la 1 y después la 2. El orden importa porque los datos pasan por el entorno:
      - los login guardan `userToken`, `chefToken`, `nutriToken` y `adminToken`;
      - el detalle guarda el `ETag` (`recipeEtag`) que exige la aprobación (#46).
 
-     **Plan gratuito de Thunder Client:** no ejecuta colecciones de más de 50 pedidos (ni siquiera una carpeta suelta, porque cuenta la colección entera). En ese caso, importá en su lugar las dos partes de `docs/thunder-client/` y ejecutá **Run All** en orden: primero `recetaria-parte-1-de-2.json` (Health → Errores y RBAC, 48 pedidos) y después `recetaria-parte-2-de-2.json` (Users y Cleanup, 14 pedidos), con el mismo entorno activo. Los tokens, ids y `ETag` pasan de una parte a la otra por el entorno. Las partes se derivan de la colección completa con `npx tsx scripts/thunder-client/split-collection.ts`, y `tests/docs/thunder-client-parts.test.ts` falla si quedan desincronizadas.
-  4. Cada pedido lleva en el nombre el código esperado (`[200]`, `[403]`, `[409]`, …) y un test que lo verifica. Las aserciones son de código HTTP: el contenido de las respuestas (estados, auditoría, filtros) lo verifican las suites E2E de `tests/e2e/` (#22).
+     Las partes se derivan de la colección completa con `npx tsx scripts/thunder-client/split-collection.ts`, y `tests/docs/thunder-client-parts.test.ts` falla si quedan desincronizadas.
+  5. Resultado esperado: la columna **Tests** queda en verde en todos los pedidos. La columna **Status** muestra también `400`, `401`, `403`, `404`, `409`, `412` y `428`: son los casos de error que la colección prueba a propósito.
+  6. Cada pedido lleva en el nombre el código esperado (`[200]`, `[403]`, `[409]`, …) y un test que lo verifica. Las aserciones son de código HTTP: el contenido de las respuestas (estados, auditoría, filtros) lo verifican las suites E2E de `tests/e2e/` (#22).
 
   **Qué cubre:** los 13 endpoints y los códigos `200`, `201`, `400`, `401`, `403` (`RN-02`…`RN-05`, `RN-09`, `RN-10`), `404`, `409`, `412` y `428`.
 
@@ -147,7 +211,7 @@ Todos los endpoints de negocio responden bajo el sobre **JSend extendido**:
 - [Cómo contribuir](CONTRIBUTING.md)
 
 ## Estado
-En desarrollo — versión 0.1.0 (MVP Backend)
+Versión 1.0.0 (MVP Backend)
 
 ## Licencia
 MIT — ver [LICENSE](LICENSE)
